@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>GeoNav - Navegação Operacional</title>
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Leaflet CSS & JS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+
+  <!-- Font Awesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+  <style>
+    * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
+    body { font-family: 'Inter', sans-serif; touch-action: manipulation; user-select: none; }
+    #map-viewport { width: 100%; height: 100%; overflow: hidden; position: relative; background: #020617; }
+    #map { width: 160vmax; height: 160vmax; position: absolute; top: 50%; left: 50%; margin-top: -80vmax; margin-left: -80vmax; z-index: 5; transform-origin: center center; }
+    .safe-top-search { top: max(14px, env(safe-area-inset-top)); }
+    .safe-bottom-panel { bottom: max(16px, env(safe-area-inset-bottom, 0px)) !important; }
+    .safe-top-hud { top: calc(76px + env(safe-area-inset-top, 0px)) !important; }
+    .vehicle-marker-wrapper { transform-origin: center center; will-change: transform; }
+    .counter-rot { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; transform: rotate(var(--counter-rot, 0deg)); transform-origin: center center; }
+    .custom-marker-pin { display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 800; border-radius: 9999px; border: 2px solid #fff; box-shadow: 0 4px 10px rgba(0,0,0,0.45); }
+    .sonar-wave { animation: sonarPulse 2s cubic-bezier(0.2, 0, 0.4, 1) infinite; }
+    @keyframes sonarPulse { 0% { transform: scale(0.8); opacity: 0.9; } 100% { transform: scale(2.6); opacity: 0; } }
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  </style>
+</head>
+
+<body class="bg-slate-950 text-slate-100 h-full w-full overflow-hidden flex flex-col antialiased">
+
+  <main class="relative flex-1 w-full h-full overflow-hidden">
+    <div id="map-viewport">
+      <div id="map"></div>
+    </div>
+
+    <!-- CAMPO DE PESQUISA DE ROTAS -->
+    <div id="searchBarWrapper" class="safe-top-search absolute left-3 right-3 sm:left-6 sm:w-96 z-30 transition-all">
+      <div class="relative bg-slate-900/95 backdrop-blur-md rounded-2xl border border-slate-700/80 shadow-2xl flex items-center px-3.5 py-1.5 focus-within:border-indigo-500">
+        <i class="fa-solid fa-route text-indigo-400 text-sm mr-2.5"></i>
+        <input id="searchInput" type="text" placeholder="Procurar rota guardada..." class="w-full bg-transparent text-sm text-white placeholder-slate-400 focus:outline-none py-1.5" onfocus="showAllRoutesList()">
+        <button onclick="logout()" title="Terminar Sessão" class="text-slate-400 hover:text-rose-400 p-1.5 text-xs ml-2">
+          <i class="fa-solid fa-power-off"></i>
+        </button>
+      </div>
+
+      <div id="searchResultsCard" class="hidden mt-2 bg-slate-900/95 backdrop-blur-md border border-slate-700/80 rounded-2xl shadow-2xl overflow-hidden max-h-72 overflow-y-auto no-scrollbar">
+        <div class="px-3 py-2 border-b border-slate-800 text-[10px] uppercase font-bold text-slate-400 flex items-center justify-between">
+          <span>Rotas Disponíveis na Nuvem</span>
+          <span id="routeCountBadge" class="bg-slate-800 px-1.5 py-0.5 rounded text-indigo-400 font-mono">0</span>
+        </div>
+        <div id="searchResultsList" class="p-1.5 space-y-1 text-xs"></div>
+      </div>
+    </div>
+
+    <!-- HUD DE ORIENTAÇÃO TURN-BY-TURN -->
+    <div id="navHud" class="safe-top-hud hidden absolute left-3 right-3 md:left-1/2 md:-translate-x-1/2 md:w-[480px] bg-slate-900/95 backdrop-blur-md rounded-2xl border border-slate-700/80 shadow-2xl p-3 z-20">
+      <div class="flex items-center gap-2.5">
+        <div id="navTurnIconBox" class="w-11 h-11 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center text-xl shrink-0">
+          <i id="navTurnIcon" class="fa-solid fa-arrow-up"></i>
+        </div>
+        <div class="flex-1 min-w-0">
+          <p id="navNextInstruction" class="text-[11px] font-semibold text-emerald-400 uppercase tracking-wider truncate">Siga pela rota</p>
+          <div class="flex items-baseline gap-1">
+            <span id="navDistanceToNext" class="text-2xl font-black text-white">0 m</span>
+            <span class="text-[11px] text-slate-400 font-medium">próx. ponto</span>
+          </div>
+        </div>
+        <div class="text-right shrink-0 bg-slate-800/80 px-2.5 py-1 rounded-xl border border-slate-700/50">
+          <span class="text-[9px] uppercase font-bold text-slate-400 block tracking-widest leading-none mb-0.5">Velocidade</span>
+          <span id="navCurrentSpeed" class="text-xl font-extrabold text-indigo-300 font-mono">0</span>
+          <span class="text-[9px] text-slate-400 font-semibold">km/h</span>
+        </div>
+      </div>
+      <div class="mt-2.5 pt-2 border-t border-slate-800 flex items-center justify-between text-[11px] text-slate-300 font-medium">
+        <span id="navRemainingDistance"><i class="fa-solid fa-flag-checkered text-indigo-400 mr-1"></i>0.0 km</span>
+        <button onclick="cancelRoute()" class="text-rose-400 hover:text-rose-300 font-bold px-2 py-0.5 rounded bg-rose-500/10">Cancelar</button>
+      </div>
+    </div>
+
+    <!-- BOTÕES FLUTUANTES -->
+    <div class="absolute right-3 top-24 flex flex-col gap-1.5 z-20">
+      <button onclick="findMyCurrentLocation()" title="Minha Posição" class="w-10 h-10 rounded-xl bg-slate-900/90 text-indigo-400 border border-slate-700/80 shadow flex items-center justify-center"><i class="fa-solid fa-crosshairs text-xs"></i></button>
+      <button id="btnFollowCam" onclick="toggleFollowCamera()" title="Fixar Câmera" class="w-10 h-10 rounded-xl bg-indigo-600 text-white border border-indigo-500 shadow flex items-center justify-center"><i class="fa-solid fa-location-crosshairs text-xs"></i></button>
+    </div>
+
+    <!-- PAINEL INFERIOR: STATUS DE SINAL E TRANSMISSÃO -->
+    <div class="safe-bottom-panel absolute left-3 right-3 md:left-1/2 md:-translate-x-1/2 md:w-[560px] bg-slate-900/95 backdrop-blur-md rounded-2xl border border-slate-800 shadow-2xl p-3 z-20 flex items-center justify-between">
+      <div class="flex items-center gap-2.5 min-w-0">
+        <span id="gpsLiveDot" class="w-3 h-3 rounded-full bg-amber-400 animate-ping shrink-0"></span>
+        <div class="min-w-0">
+          <p id="gpsStatusText" class="text-xs font-semibold text-slate-200 truncate">A procurar satélites GPS...</p>
+          <p id="telemetryStatusText" class="text-[10px] text-emerald-400 truncate"><i class="fa-solid fa-tower-broadcast mr-1"></i>Transmissão ativa</p>
+        </div>
+      </div>
+      <button id="btnEnableGps" onclick="startRealGps()" class="hidden px-3 py-1.5 rounded-xl bg-amber-500 text-slate-950 text-xs font-extrabold">Ativar GPS</button>
+    </div>
+  </main>
+
+  <script>
+    const API_BASE_URL = 'https://teste1-p5pw.onrender.com/api';
+
+    // 🔒 CONTROLO DE SESSÃO
+    const sessionUser = JSON.parse(localStorage.getItem('geonav_session') || 'null');
+    if (!sessionUser) {
+      window.location.href = 'login.html';
+    }
+
+    function logout() {
+      localStorage.removeItem('geonav_session');
+      window.location.href = 'login.html';
+    }
+
+    let map = null, markersLayer = null, mainPolyline = null, progressPolyline = null, vehicleMarker = null;
+    let userLat = null, userLng = null, currentSpeedKmh = 0, currentBearing = 0;
+    let followVehicle = true, isNavigating = false;
+    let waypoints = [], interpolatedPoints = [], cumulativeDistances = [], totalRouteDistanceMeters = 0;
+    let dbRoutes = [];
+    let lastTelemetryTime = 0;
+
+    window.addEventListener('load', () => {
+      initMap();
+      fetchDatabaseRoutes();
+      startRealGps();
+    });
+
+    function initMap() {
+      map = L.map('map', { zoomControl: false, attributionControl: false }).setView([-23.5505, -46.6333], 15);
+      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19 }).addTo(map);
+
+      markersLayer = L.layerGroup().addTo(map);
+      mainPolyline = L.polyline([], { color: '#6366f1', weight: 7, opacity: 0.9 }).addTo(map);
+      progressPolyline = L.polyline([], { color: '#10b981', weight: 8, opacity: 0.95 }).addTo(map);
+    }
+
+    async function fetchDatabaseRoutes() {
+      try {
+        const res = await fetch(`${API_BASE_URL}/routes`);
+        if (res.ok) {
+          dbRoutes = await res.json();
+          document.getElementById('routeCountBadge').innerText = dbRoutes.length;
+          renderRouteList(dbRoutes);
+        }
+      } catch (e) {}
+    }
+
+    function showAllRoutesList() { document.getElementById('searchResultsCard').classList.remove('hidden'); }
+
+    function renderRouteList(list) {
+      const c = document.getElementById('searchResultsList');
+      if (!list.length) { c.innerHTML = '<div class="p-4 text-center text-slate-400">Nenhuma rota encontrada.</div>'; return; }
+      c.innerHTML = list.map((item, idx) => `
+        <div class="p-2.5 rounded-xl hover:bg-slate-800 flex items-center justify-between gap-2.5 cursor-pointer border border-transparent hover:border-slate-700 transition" onclick="selectRoute(${idx})">
+          <div class="min-w-0 flex-1">
+            <p class="font-bold text-white text-xs truncate">${item.name}</p>
+            <p class="text-[10px] text-slate-400">${(item.distance_meters / 1000).toFixed(2)} km • ${item.waypoints.length} pts</p>
+          </div>
+          <span class="px-2.5 py-1 rounded-lg bg-emerald-600 text-white text-[11px] font-bold">Navegar</span>
+        </div>
+      `).join('');
+    }
+
+    function selectRoute(idx) {
+      const item = dbRoutes[idx];
+      waypoints = item.waypoints;
+      document.getElementById('searchResultsCard').classList.add('hidden');
+      document.getElementById('searchInput').value = item.name;
+      document.getElementById('navHud').classList.remove('hidden');
+
+      markersLayer.clearLayers();
+      const coords = waypoints.map(p => [p.lat, p.lng]);
+      mainPolyline.setLatLngs(coords);
+      progressPolyline.setLatLngs([]);
+
+      generateInterpolatedRoute();
+      isNavigating = true;
+      map.fitBounds(L.latLngBounds(coords), { padding: [80, 80] });
+    }
+
+    function generateInterpolatedRoute() {
+      interpolatedPoints = [];
+      cumulativeDistances = [0];
+      totalRouteDistanceMeters = 0;
+      for (let i = 0; i < waypoints.length - 1; i++) {
+        const p1 = waypoints[i], p2 = waypoints[i+1];
+        const segDist = distanceInMeters(p1.lat, p1.lng, p2.lat, p2.lng);
+        totalRouteDistanceMeters += segDist;
+        interpolatedPoints.push({ lat: p1.lat, lng: p1.lng });
+        cumulativeDistances.push(totalRouteDistanceMeters);
+      }
+    }
+
+    function distanceInMeters(lat1, lon1, lat2, lon2) {
+      const R = 6371e3;
+      const dLat = (lat2 - lat1) * Math.PI / 180, dLon = (lon2 - lon1) * Math.PI / 180;
+      const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+      return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+    }
+
+    function startRealGps() {
+      if (!navigator.geolocation) return;
+      navigator.geolocation.watchPosition(
+        pos => {
+          userLat = pos.coords.latitude;
+          userLng = pos.coords.longitude;
+          currentSpeedKmh = pos.coords.speed ? Math.round(pos.coords.speed * 3.6) : 0;
+          currentBearing = pos.coords.heading || 0;
+
+          document.getElementById('gpsStatusText').innerText = `GPS Ligado (±${Math.round(pos.coords.accuracy)}m)`;
+          document.getElementById('gpsLiveDot').className = 'w-3 h-3 rounded-full bg-emerald-400 shrink-0';
+          document.getElementById('navCurrentSpeed').innerText = currentSpeedKmh;
+
+          updateVehicle(userLat, userLng, currentBearing);
+          sendTelemetry(userLat, userLng, currentBearing, currentSpeedKmh);
+
+          if (isNavigating && waypoints.length > 0) {
+            updateNavigationHUD(userLat, userLng);
+          }
+        },
+        err => {
+          document.getElementById('gpsStatusText').innerText = 'Sem sinal GPS';
+          document.getElementById('gpsLiveDot').className = 'w-3 h-3 rounded-full bg-rose-500 shrink-0';
+        },
+        { enableHighAccuracy: true, maximumAge: 1000, timeout: 10000 }
+      );
+    }
+
+    // 📡 TRANSMISSÃO AUTOMÁTICA DA LOCALIZAÇÃO PARA O PAINEL DO EDITOR
+    function sendTelemetry(lat, lng, heading, speed) {
+      const now = Date.now();
+      if (now - lastTelemetryTime < 5000) return; // Envia a cada 5 segundos
+      lastTelemetryTime = now;
+
+      fetch(`${API_BASE_URL}/telemetry`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: sessionUser.id,
+          username: sessionUser.username,
+          name: sessionUser.name,
+          role: sessionUser.role,
+          latitude: lat,
+          longitude: lng,
+          heading: heading || 0,
+          speed_kmh: speed || 0
+        })
+      }).catch(() => {});
+    }
+
+    function updateVehicle(lat, lng, heading) {
+      if (!vehicleMarker) {
+        const html = `
+          <div class="relative flex items-center justify-center">
+            <div class="absolute w-12 h-12 rounded-full bg-indigo-500/30 sonar-wave"></div>
+            <div id="vehicleIndicator" class="w-10 h-10 rounded-full bg-indigo-600 border-2 border-white shadow-2xl flex items-center justify-center text-white text-base vehicle-marker-wrapper">
+              <i class="fa-solid fa-arrow-up"></i>
+            </div>
+          </div>
+        `;
+        const icon = L.divIcon({ html, className: '', iconSize: [40, 40], iconAnchor: [20, 20] });
+        vehicleMarker = L.marker([lat, lng], { icon, zIndexOffset: 2000 }).addTo(map);
+      } else {
+        vehicleMarker.setLatLng([lat, lng]);
+        const el = document.getElementById('vehicleIndicator');
+        if (el) el.style.transform = `rotate(${heading}deg)`;
+      }
+
+      if (followVehicle) map.panTo([lat, lng], { animate: true, duration: 0.5 });
+    }
+
+    function updateNavigationHUD(lat, lng) {
+      const lastPoint = waypoints[waypoints.length - 1];
+      const distToDest = distanceInMeters(lat, lng, lastPoint.lat, lastPoint.lng);
+      document.getElementById('navRemainingDistance').innerHTML = `<i class="fa-solid fa-flag-checkered text-indigo-400 mr-1"></i>${distToDest >= 1000 ? (distToDest / 1000).toFixed(2) + ' km' : Math.round(distToDest) + ' m'}`;
+      document.getElementById('navDistanceToNext').innerText = distToDest >= 1000 ? (distToDest / 1000).toFixed(1) + ' km' : Math.round(distToDest) + ' m';
+    }
+
+    function cancelRoute() {
+      isNavigating = false;
+      mainPolyline.setLatLngs([]);
+      progressPolyline.setLatLngs([]);
+      document.getElementById('navHud').classList.add('hidden');
+      document.getElementById('searchInput').value = '';
+    }
+
+    function toggleFollowCamera() {
+      followVehicle = !followVehicle;
+      document.getElementById('btnFollowCam').className = followVehicle ? 'w-10 h-10 rounded-xl bg-indigo-600 text-white border border-indigo-500 shadow flex items-center justify-center' : 'w-10 h-10 rounded-xl bg-slate-900/90 text-slate-400 border border-slate-700/80 shadow flex items-center justify-center';
+    }
+
+    function findMyCurrentLocation() {
+      if (userLat && userLng) map.setView([userLat, userLng], 17);
+    }
+  </script>
+</body>
+</html>
