@@ -1,0 +1,2841 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>GeoNav Studio - Rotas, Velocidades & Cercas (Oracle)</title>
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Leaflet CSS & JS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+
+  <!-- Font Awesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+  <!-- Google Font Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
+          },
+          colors: {
+            brand: {
+              50: '#eef2ff',
+              100: '#e0e7ff',
+              500: '#6366f1',
+              600: '#4f46e5',
+              700: '#4338ca',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    * {
+      -webkit-tap-highlight-color: transparent;
+      box-sizing: border-box;
+    }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      touch-action: manipulation;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    #map {
+      height: 100%;
+      width: 100%;
+      z-index: 5;
+    }
+    .safe-top-header {
+      padding-top: max(8px, env(safe-area-inset-top));
+      min-height: calc(52px + env(safe-area-inset-top, 0px));
+    }
+    .safe-bottom-panel {
+      bottom: max(12px, env(safe-area-inset-bottom, 0px)) !important;
+    }
+    .safe-top-hud {
+      top: calc(58px + env(safe-area-inset-top, 0px)) !important;
+    }
+    .custom-marker-pin {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #ffffff;
+      font-weight: 800;
+      border-radius: 9999px;
+      border: 2px solid #ffffff;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.45);
+      transition: transform 0.15s ease;
+    }
+    .custom-marker-pin:hover {
+      transform: scale(1.15);
+    }
+    .fence-vertex-handle {
+      width: 16px;
+      height: 16px;
+      background-color: #ef4444;
+      border: 2.5px solid #ffffff;
+      border-radius: 9999px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
+      cursor: grab;
+      transition: transform 0.12s ease, background-color 0.12s ease;
+    }
+    .fence-vertex-handle:hover {
+      transform: scale(1.25);
+      background-color: #f87171;
+    }
+    .fence-speed-badge, .segment-speed-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      color: #ffffff;
+      font-weight: 800;
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 9999px;
+      border: 1.5px solid #ffffff;
+      box-shadow: 0 3px 10px rgba(0, 0, 0, 0.5);
+      white-space: nowrap;
+      backdrop-filter: blur(4px);
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      cursor: pointer;
+    }
+    .leaflet-interactive .segment-speed-badge, .leaflet-marker-icon.leaflet-interactive .segment-speed-badge {
+      pointer-events: auto;
+    }
+    .fence-speed-badge {
+      background: rgba(220, 38, 38, 0.92);
+      font-size: 11px;
+      padding: 3px 8px;
+      border: 2px solid #ffffff;
+    }
+    .badge-paved {
+      background: rgba(37, 99, 235, 0.92);
+    }
+    .badge-unpaved {
+      background: rgba(217, 119, 6, 0.92);
+    }
+    .badge-slow {
+      background: rgba(220, 38, 38, 0.92);
+    }
+    .vehicle-marker-wrapper {
+      transition: transform 0.12s linear;
+      transform-origin: center center;
+    }
+    .sonar-wave {
+      animation: sonarPulse 2s cubic-bezier(0.2, 0, 0.4, 1) infinite;
+    }
+    @keyframes sonarPulse {
+      0% { transform: scale(0.8); opacity: 0.9; }
+      100% { transform: scale(2.8); opacity: 0; }
+    }
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    .mid-handle {
+      width: 12px; height: 12px; border-radius: 9999px;
+      background: rgba(255,255,255,.92); border: 2px solid #4f46e5;
+      box-shadow: 0 1px 4px rgba(0,0,0,.5); cursor: grab; opacity: .85;
+      transition: transform .12s ease;
+    }
+    .mid-handle:hover { transform: scale(1.35); opacity: 1; }
+  </style>
+</head>
+
+<body class="bg-slate-950 text-slate-100 h-full w-full overflow-hidden flex flex-col antialiased">
+
+  <!-- Cabeçalho -->
+  <header class="safe-top-header bg-slate-900/95 backdrop-blur-md border-b border-slate-800/80 px-2 sm:px-4 flex items-center justify-between z-30 shrink-0 shadow-lg">
+    <div class="flex items-center gap-2">
+      <div class="w-8 h-8 rounded-xl bg-gradient-to-tr from-brand-600 via-indigo-500 to-cyan-400 flex items-center justify-center shadow-lg shadow-brand-500/25 shrink-0">
+        <i class="fa-solid fa-truck-moving text-white text-xs"></i>
+      </div>
+      <div>
+        <h1 class="text-xs sm:text-sm font-extrabold tracking-tight text-white flex items-center gap-1.5">
+          GeoNav <span class="hidden xs:inline text-[9px] sm:text-[10px] tracking-normal font-semibold px-1 py-0.5 rounded-full bg-red-500/20 text-red-300 border border-red-500/30">ORACLE DB</span>
+        </h1>
+      </div>
+    </div>
+
+    <!-- SELETOR DE MODO -->
+    <div class="flex items-center bg-slate-800/90 p-0.5 sm:p-1 rounded-xl border border-slate-700/60 shadow-inner">
+      <button id="btnModeEdit" onclick="setAppMode('edit')" class="px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-lg text-[11px] sm:text-xs font-bold flex items-center gap-1 transition-all bg-brand-600 text-white shadow">
+        <i class="fa-solid fa-bezier-curve text-[10px]"></i>
+        <span>Desenhar</span>
+      </button>
+      <button id="btnModeSpeed" onclick="setAppMode('speed')" class="px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-lg text-[11px] sm:text-xs font-bold flex items-center gap-1 transition-all text-slate-400 hover:text-white" title="Definir velocidades por trecho">
+        <i class="fa-solid fa-gauge-high text-[10px]"></i>
+        <span>Velocidade</span>
+      </button>
+      <button id="btnModeFence" onclick="setAppMode('fence')" class="px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-lg text-[11px] sm:text-xs font-bold flex items-center gap-1 transition-all text-slate-400 hover:text-white">
+        <i class="fa-solid fa-draw-polygon text-[10px]"></i>
+        <span>Cerca</span>
+      </button>
+      <button id="btnModeNav" onclick="setAppMode('nav')" class="px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-lg text-[11px] sm:text-xs font-bold flex items-center gap-1 transition-all text-slate-400 hover:text-white">
+        <i class="fa-solid fa-location-arrow text-[10px]"></i>
+        <span>Navegar</span>
+      </button>
+    </div>
+
+    <!-- Botões Rápidos -->
+    <div class="flex items-center gap-1">
+      <button onclick="openSearchModal()" title="Buscar Endereço" class="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 transition active:scale-95">
+        <i class="fa-solid fa-magnifying-glass text-xs"></i>
+      </button>
+      <button onclick="toggleRouteManagerModal()" title="Rotas e Cercas Salvas" class="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center rounded-xl bg-red-950/40 hover:bg-red-900/50 border border-red-500/40 text-red-300 transition active:scale-95">
+        <i class="fa-solid fa-database text-xs"></i>
+      </button>
+      <button onclick="findMyCurrentLocation()" title="Minha Localização" class="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 transition active:scale-95">
+        <i class="fa-solid fa-crosshairs text-xs"></i>
+      </button>
+    </div>
+  </header>
+
+  <main class="relative flex-1 w-full h-full overflow-hidden">
+    <div id="map"></div>
+
+    <!-- Barra de Indicação de Rota em Edição -->
+    <div id="activeRouteEditBanner" class="hidden absolute top-3 left-1/2 -translate-x-1/2 bg-slate-900/90 backdrop-blur-md border border-brand-500/40 px-3 py-1.5 rounded-full shadow-xl z-20 flex items-center gap-2 text-xs">
+      <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+      <span class="text-slate-300">Editando:</span>
+      <strong id="activeRouteEditName" class="text-white font-bold truncate max-w-[160px] sm:max-w-xs">Nome da Rota</strong>
+      <button onclick="unlinkLoadedRoute()" title="Desvincular e transformar em nova rota" class="text-[10px] text-slate-400 hover:text-rose-400 ml-1">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+    </div>
+
+    <!-- HUD de Navegação -->
+    <div id="navHud" class="safe-top-hud hidden absolute left-2.5 right-2.5 md:left-1/2 md:-translate-x-1/2 md:w-[480px] bg-slate-900/95 backdrop-blur-md rounded-2xl border border-slate-700/80 shadow-2xl p-3 z-20 transition-all duration-300">
+      <div id="navFenceAlert" class="hidden mb-2 px-2.5 py-1.5 rounded-xl bg-rose-600/25 border border-rose-500/50 flex items-center justify-between text-rose-200 text-xs font-bold animate-pulse">
+        <div class="flex items-center gap-1.5">
+          <i class="fa-solid fa-triangle-exclamation text-rose-400"></i>
+          <span id="navFenceAlertName">Restrição de Trajeto</span>
+        </div>
+        <span id="navFenceAlertSpeed" class="px-2 py-0.5 rounded-full bg-rose-600 text-white text-[10px] font-black">MÁX 20 km/h</span>
+      </div>
+
+      <div class="flex items-center gap-2.5">
+        <div id="navTurnIconBox" class="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center text-xl shrink-0 shadow-inner">
+          <i id="navTurnIcon" class="fa-solid fa-arrow-up"></i>
+        </div>
+
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-1.5">
+            <p id="navNextInstruction" class="text-[11px] font-semibold text-emerald-400 uppercase tracking-wider truncate">Siga pela rota</p>
+            <span id="navRoadBadge" class="px-1.5 py-0.5 rounded text-[9px] font-black bg-blue-600/30 border border-blue-500/40 text-blue-300">ASFALTO</span>
+          </div>
+          <div class="flex items-baseline gap-1">
+            <span id="navDistanceToNext" class="text-xl sm:text-2xl font-black text-white tracking-tight">0 m</span>
+            <span class="text-[11px] text-slate-400 font-medium">próx. ponto</span>
+          </div>
+        </div>
+
+        <div class="text-right shrink-0 bg-slate-800/80 px-2 py-1 rounded-xl border border-slate-700/50">
+          <span class="text-[9px] uppercase font-bold text-slate-400 block tracking-widest leading-none mb-0.5">Velocidade</span>
+          <div class="flex items-baseline justify-end gap-0.5">
+            <span id="navCurrentSpeed" class="text-lg font-extrabold text-brand-300 font-mono">0</span>
+            <span class="text-[9px] text-slate-400 font-semibold">km/h</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- CRONÔMETRO: PERCORRIDO / RESTANTE / DISTÂNCIA -->
+      <div class="mt-2.5 pt-2 border-t border-slate-800/90 grid grid-cols-3 gap-1 text-[11px] text-slate-300 font-medium text-center">
+        <div class="flex flex-col items-start text-left">
+          <span class="text-[9px] text-slate-400 uppercase font-semibold">Percorrido</span>
+          <span id="navElapsedTime" class="font-bold text-amber-300 font-mono">00:00</span>
+        </div>
+        <div class="flex flex-col items-center">
+          <span class="text-[9px] text-slate-400 uppercase font-semibold">Restante</span>
+          <span id="navRemainingTime" class="font-bold text-emerald-400 font-mono">00:00</span>
+        </div>
+        <div class="flex flex-col items-end text-right">
+          <span class="text-[9px] text-slate-400 uppercase font-semibold">Distância</span>
+          <span id="navRemainingDistance" class="font-bold text-white font-mono">0.0 km</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Controles Flutuantes da Direita -->
+    <div class="absolute right-2.5 top-16 sm:top-20 flex flex-col gap-1.5 z-20">
+      <button onclick="mapZoomIn()" class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-slate-900/90 text-slate-200 border border-slate-700/80 shadow-xl flex items-center justify-center hover:bg-slate-800 active:scale-95 transition">
+        <i class="fa-solid fa-plus text-xs"></i>
+      </button>
+      <button onclick="mapZoomOut()" class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-slate-900/90 text-slate-200 border border-slate-700/80 shadow-xl flex items-center justify-center hover:bg-slate-800 active:scale-95 transition">
+        <i class="fa-solid fa-minus text-xs"></i>
+      </button>
+      <button id="btnFollowCam" onclick="toggleFollowCamera()" title="Fixar Câmera" class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-brand-600 text-white border border-brand-500 shadow-xl flex items-center justify-center active:scale-95 transition">
+        <i class="fa-solid fa-location-crosshairs text-xs"></i>
+      </button>
+      <button onclick="fitRouteBounds()" title="Enquadrar Rota" class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-slate-900/90 text-slate-200 border border-slate-700/80 shadow-xl flex items-center justify-center hover:bg-slate-800 active:scale-95 transition">
+        <i class="fa-solid fa-expand text-xs"></i>
+      </button>
+      
+      <!-- Seletor de Camadas -->
+      <div class="relative">
+        <button id="btnLayerToggle" onclick="toggleLayerMenu()" title="Mudar Mapa" class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-slate-900/90 text-amber-400 border border-slate-700/80 shadow-xl flex items-center justify-center hover:bg-slate-800 active:scale-95 transition">
+          <i class="fa-solid fa-layer-group text-xs"></i>
+        </button>
+        <div id="layerMenuDropdown" class="hidden absolute right-11 bottom-0 w-44 bg-slate-900/95 backdrop-blur-md border border-slate-700/90 rounded-2xl shadow-2xl p-1.5 flex flex-col gap-1 z-30">
+          <span class="text-[9px] font-bold uppercase tracking-wider text-slate-400 px-2 py-0.5">Mapa Base</span>
+          <button onclick="switchBaseLayer('streets')" id="layerBtn_streets" class="w-full text-left px-2 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 bg-brand-600/30 text-brand-300 border border-brand-500/40">
+            <i class="fa-solid fa-road text-[10px]"></i>
+            <span>Ruas (Esri)</span>
+          </button>
+          <button onclick="switchBaseLayer('satellite')" id="layerBtn_satellite" class="w-full text-left px-2 py-1.5 rounded-lg text-xs font-medium text-slate-300 hover:bg-slate-800 flex items-center gap-1.5">
+            <i class="fa-solid fa-earth-americas text-[10px] text-emerald-400"></i>
+            <span>Satélite HD</span>
+          </button>
+          <button onclick="switchBaseLayer('topo')" id="layerBtn_topo" class="w-full text-left px-2 py-1.5 rounded-lg text-xs font-medium text-slate-300 hover:bg-slate-800 flex items-center gap-1.5">
+            <i class="fa-solid fa-mountain text-[10px] text-amber-400"></i>
+            <span>Topografia</span>
+          </button>
+          <button onclick="switchBaseLayer('cycle')" id="layerBtn_cycle" class="w-full text-left px-2 py-1.5 rounded-lg text-xs font-medium text-slate-300 hover:bg-slate-800 flex items-center gap-1.5">
+            <i class="fa-solid fa-person-biking text-[10px] text-cyan-400"></i>
+            <span>Ciclovias</span>
+          </button>
+          <button onclick="switchBaseLayer('dark')" id="layerBtn_dark" class="w-full text-left px-2 py-1.5 rounded-lg text-xs font-medium text-slate-300 hover:bg-slate-800 flex items-center gap-1.5">
+            <i class="fa-solid fa-moon text-[10px] text-indigo-400"></i>
+            <span>Noturno</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- PAINEL INFERIOR: MODO DESENHAR ROTA -->
+    <div id="editToolbar" class="safe-bottom-panel absolute left-2.5 right-2.5 md:left-1/2 md:-translate-x-1/2 md:w-[680px] bg-slate-900/95 backdrop-blur-md rounded-2xl border border-slate-800 shadow-2xl p-3 z-20 flex flex-col gap-2.5 transition-all">
+      <div class="flex flex-wrap items-center justify-between gap-1.5 border-b border-slate-800 pb-2">
+        <div class="flex items-center gap-2">
+          <div class="flex items-center gap-1 text-[11px] text-slate-300 font-semibold">
+            <span class="w-2 h-2 rounded-full bg-emerald-500 inline-block animate-pulse"></span>
+            <span id="routePointsCount">0 pts</span>
+          </div>
+          <div class="h-3 w-px bg-slate-700"></div>
+          <div class="text-[11px] font-bold text-white flex items-center gap-1">
+            <i class="fa-solid fa-route text-brand-400"></i>
+            <span id="routeTotalDistance">0.00 km</span>
+          </div>
+          <div class="h-3 w-px bg-slate-700"></div>
+          <div class="text-[11px] font-semibold text-slate-300 flex items-center gap-1">
+            <i class="fa-regular fa-clock text-amber-400"></i>
+            <span id="routeETA">00:00</span>
+          </div>
+        </div>
+
+        <div class="flex items-center bg-slate-800 p-0.5 rounded-lg border border-slate-700 text-xs">
+          <button onclick="setTravelProfile('walk')" id="profWalk" class="w-7 h-7 flex items-center justify-center rounded text-slate-400 hover:text-white" title="Caminhada">
+            <i class="fa-solid fa-person-walking text-xs"></i>
+          </button>
+          <button onclick="setTravelProfile('car')" id="profCar" class="w-7 h-7 flex items-center justify-center rounded bg-brand-600 text-white font-bold" title="Caminhão / Veículo">
+            <i class="fa-solid fa-truck text-xs"></i>
+          </button>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-between gap-1.5 flex-wrap">
+        <div class="flex items-center gap-1">
+          <button onclick="undoLastWaypoint()" class="h-9 px-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 flex items-center gap-1 active:scale-95 transition">
+            <i class="fa-solid fa-rotate-left text-[11px]"></i>
+            <span class="hidden xs:inline">Desfazer</span>
+          </button>
+          <button onclick="reverseRoute()" class="h-9 px-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 flex items-center gap-1 active:scale-95 transition" title="Inverter Ordem">
+            <i class="fa-solid fa-arrows-left-right text-[11px]"></i>
+            <span class="hidden xs:inline">Inverter</span>
+          </button>
+          <button onclick="clearCurrentRoute()" class="h-9 px-2.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 text-xs font-semibold border border-rose-500/30 flex items-center gap-1 active:scale-95 transition">
+            <i class="fa-solid fa-trash-can text-[11px]"></i>
+            <span class="hidden xs:inline">Limpar</span>
+          </button>
+        </div>
+
+        <div class="flex items-center gap-1.5">
+          <button onclick="setAppMode('speed')" class="h-9 px-3 rounded-xl bg-amber-600/30 hover:bg-amber-600/40 text-amber-300 border border-amber-500/40 text-xs font-bold flex items-center gap-1.5 active:scale-95 transition">
+            <i class="fa-solid fa-gauge-high"></i>
+            <span>Velocidades</span>
+          </button>
+          <button onclick="openSaveModal()" class="h-9 px-3 rounded-xl bg-emerald-600/30 hover:bg-emerald-600/40 text-emerald-300 border border-emerald-500/40 text-xs font-bold flex items-center gap-1.5 active:scale-95 transition">
+            <i class="fa-solid fa-cloud-arrow-up"></i>
+            <span id="lblBtnSaveMain">Salvar</span>
+          </button>
+          <button onclick="startNavigation()" class="h-9 px-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-extrabold shadow-lg shadow-emerald-600/30 flex items-center gap-1.5 active:scale-95 transition">
+            <i class="fa-solid fa-play text-xs"></i>
+            <span>Iniciar</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- PAINEL INFERIOR: MODO EDITOR DE VELOCIDADE -->
+    <div id="speedToolbar" class="safe-bottom-panel hidden absolute left-2.5 right-2.5 md:left-1/2 md:-translate-x-1/2 md:w-[680px] bg-slate-900/95 backdrop-blur-md rounded-2xl border border-amber-500/40 shadow-2xl p-3 z-20 flex flex-col gap-2.5 transition-all">
+      <div class="flex flex-wrap items-center justify-between gap-1.5 border-b border-slate-800 pb-2">
+        <div class="flex items-center gap-2">
+          <div class="flex items-center gap-1.5 text-[11px] text-amber-300 font-bold">
+            <span class="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block animate-pulse"></span>
+            <span>Editor de Segmentos & Velocidades</span>
+          </div>
+          <div class="h-3 w-px bg-slate-700"></div>
+          <div id="speedHint" class="text-[11px] font-semibold text-slate-300">
+            Toque no ponto inicial e depois no final (ou toque na linha)
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2 text-[10px]">
+          <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-blue-500"></span> Pavimentada (80)</span>
+          <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span> Terra (40)</span>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-between gap-1.5 flex-wrap">
+        <div class="flex items-center gap-1.5">
+          <button onclick="applyBatchSpeedToAll(80, 'paved')" class="h-9 px-2.5 rounded-xl bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 text-xs font-bold border border-blue-500/30 flex items-center gap-1 active:scale-95 transition">
+            <i class="fa-solid fa-road"></i>
+            <span>Toda em Asfalto (80)</span>
+          </button>
+          <button onclick="applyBatchSpeedToAll(40, 'unpaved')" class="h-9 px-2.5 rounded-xl bg-amber-600/20 hover:bg-amber-600/30 text-amber-300 text-xs font-bold border border-amber-500/30 flex items-center gap-1 active:scale-95 transition">
+            <i class="fa-solid fa-mound"></i>
+            <span>Toda em Terra (40)</span>
+          </button>
+        </div>
+
+        <div class="flex items-center gap-1.5">
+          <button onclick="setAppMode('edit')" class="h-9 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-xs font-semibold flex items-center gap-1">
+            <i class="fa-solid fa-arrow-left"></i>
+            <span>Voltar</span>
+          </button>
+          <button onclick="openSaveModal()" class="h-9 px-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-extrabold shadow flex items-center gap-1.5">
+            <i class="fa-solid fa-cloud-arrow-up"></i>
+            <span id="lblBtnSaveSpeed">Salvar Alterações</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- PAINEL INFERIOR: MODO CERCA -->
+    <div id="fenceToolbar" class="safe-bottom-panel hidden absolute left-2.5 right-2.5 md:left-1/2 md:-translate-x-1/2 md:w-[680px] bg-slate-900/95 backdrop-blur-md rounded-2xl border border-rose-500/40 shadow-2xl p-3 z-20 flex flex-col gap-2.5 transition-all">
+      <div class="flex flex-wrap items-center justify-between gap-1.5 border-b border-slate-800 pb-2">
+        <div class="flex items-center gap-2">
+          <div class="flex items-center gap-1.5 text-[11px] text-rose-300 font-bold">
+            <span class="w-2.5 h-2.5 rounded-full bg-rose-500 inline-block animate-pulse"></span>
+            <span id="fenceEditStatus">Desenhando Nova Cerca</span>
+          </div>
+          <div class="h-3 w-px bg-slate-700"></div>
+          <div class="text-[11px] font-semibold text-slate-300 flex items-center gap-1">
+            <i class="fa-solid fa-draw-polygon text-rose-400"></i>
+            <span id="fencePointsCount">0 vértices</span>
+          </div>
+        </div>
+
+        <span class="text-[10px] text-slate-400 hidden sm:inline">
+          Arraste os vértices para editar • Clique num vértice para removê-lo
+        </span>
+      </div>
+
+      <div class="flex items-center justify-between gap-1.5 flex-wrap">
+        <div class="flex items-center gap-1">
+          <button onclick="undoLastFencePoint()" class="h-9 px-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 flex items-center gap-1 active:scale-95 transition">
+            <i class="fa-solid fa-rotate-left text-[11px]"></i>
+            <span class="hidden xs:inline">Desfazer</span>
+          </button>
+          <button onclick="clearCurrentFenceDraft()" class="h-9 px-2.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 text-xs font-semibold border border-rose-500/30 flex items-center gap-1 active:scale-95 transition">
+            <i class="fa-solid fa-eraser text-[11px]"></i>
+            <span class="hidden xs:inline">Limpar Polígono</span>
+          </button>
+          <button onclick="openFenceListModal()" class="h-9 px-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 text-xs font-semibold border border-slate-700 flex items-center gap-1 active:scale-95 transition">
+            <i class="fa-solid fa-list-check text-[11px]"></i>
+            <span>Cercas (<span id="btnFenceCountBadge">0</span>)</span>
+          </button>
+        </div>
+
+        <div class="flex items-center gap-1.5">
+          <button id="btnDeleteEditingFence" onclick="deleteCurrentlyEditingFence()" class="hidden h-9 px-3 rounded-xl bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/40 text-xs font-bold items-center gap-1 active:scale-95 transition">
+            <i class="fa-solid fa-trash-can"></i>
+            <span>Excluir Cerca</span>
+          </button>
+          <button onclick="openSaveFenceModal()" class="h-9 px-3.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-extrabold shadow-lg shadow-rose-600/30 flex items-center gap-1.5 active:scale-95 transition">
+            <i class="fa-solid fa-gauge-high text-xs"></i>
+            <span id="btnSaveFenceLabel">Definir km/h & Salvar</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- PAINEL INFERIOR: MODO NAVEGAÇÃO -->
+    <div id="navControlPanel" class="safe-bottom-panel hidden absolute left-2.5 right-2.5 md:left-1/2 md:-translate-x-1/2 md:w-[620px] bg-slate-900/95 backdrop-blur-md rounded-2xl border border-slate-800 shadow-2xl p-3 z-20 flex flex-col gap-2.5 transition-all">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center bg-slate-800 p-0.5 rounded-lg border border-slate-700">
+          <button id="btnNavSim" onclick="selectNavMethod('sim')" class="px-2.5 py-1 rounded text-xs font-semibold bg-brand-600 text-white transition">Simulação</button>
+          <button id="btnNavReal" onclick="selectNavMethod('real')" class="px-2.5 py-1 rounded text-xs font-semibold text-slate-400 hover:text-white transition">GPS Real</button>
+        </div>
+
+        <div id="simSpeedControls" class="flex items-center gap-1 text-xs">
+          <button onclick="changeSimSpeed(1)" class="sim-speed-btn px-2 py-0.5 rounded font-bold bg-brand-600 border border-brand-500 text-white text-[11px]" data-spd="1">1x</button>
+          <button onclick="changeSimSpeed(2)" class="sim-speed-btn px-2 py-0.5 rounded font-bold bg-slate-800 border border-slate-700 text-slate-400 text-[11px]" data-spd="2">2x</button>
+          <button onclick="changeSimSpeed(5)" class="sim-speed-btn px-2 py-0.5 rounded font-bold bg-slate-800 border border-slate-700 text-slate-400 text-[11px]" data-spd="5">5x</button>
+        </div>
+      </div>
+
+      <div id="simBar" class="flex items-center justify-between gap-2 pt-1 border-t border-slate-800">
+        <div class="flex items-center gap-1.5">
+          <button id="btnPlayPause" onclick="togglePlayPauseSim()" class="w-9 h-9 rounded-xl bg-emerald-500 text-slate-950 flex items-center justify-center font-bold text-sm shadow-md active:scale-95 transition">
+            <i class="fa-solid fa-play"></i>
+          </button>
+          <button onclick="resetSim()" class="w-9 h-9 rounded-xl bg-slate-800 text-slate-300 border border-slate-700 flex items-center justify-center text-sm active:scale-95 transition">
+            <i class="fa-solid fa-arrow-rotate-left"></i>
+          </button>
+        </div>
+
+        <div class="flex-1 mx-1.5 flex flex-col gap-0.5">
+          <input id="simSlider" type="range" min="0" max="1000" value="0" step="1" oninput="seekSim(this.value)" class="w-full accent-brand-500 bg-slate-800 h-2 rounded-lg cursor-pointer">
+          <div class="flex justify-between text-[9px] text-slate-400 font-mono">
+            <span id="simCurrentDist">0 m</span>
+            <span id="simTotalDist">0 km</span>
+          </div>
+        </div>
+
+        <button onclick="exitNavigation()" class="h-9 px-3 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 text-xs font-bold transition active:scale-95">
+          Sair
+        </button>
+      </div>
+
+      <div id="realGpsBar" class="hidden flex items-center justify-between text-xs py-1.5 px-3 rounded-xl bg-slate-800/80 border border-slate-700">
+        <div class="flex items-center gap-2">
+          <span id="gpsLiveDot" class="w-2.5 h-2.5 rounded-full bg-amber-400 animate-ping"></span>
+          <span id="gpsStatusText" class="text-slate-300 font-medium text-[11px] truncate">Buscando sinal GPS...</span>
+        </div>
+        <button onclick="exitNavigation()" class="h-8 px-3 rounded-lg bg-rose-500/20 text-rose-300 text-xs font-bold">
+          Sair
+        </button>
+      </div>
+    </div>
+  </main>
+
+  <!-- MODAL: EDITAR VELOCIDADE DO TRECHO SELECIONADO -->
+  <div id="segmentSpeedModal" class="hidden fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-3">
+    <div class="bg-slate-900 border border-amber-500/40 rounded-2xl w-full max-w-sm shadow-2xl p-4 flex flex-col gap-3">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+        <h3 class="font-bold text-sm text-white flex items-center gap-2">
+          <i class="fa-solid fa-gauge-high text-amber-400"></i>
+          Configurar Velocidade do Trecho
+        </h3>
+        <button onclick="closeSegmentSpeedModal()" class="w-7 h-7 rounded-lg bg-slate-800 text-slate-400 flex items-center justify-center">
+          <i class="fa-solid fa-xmark text-xs"></i>
+        </button>
+      </div>
+
+      <div class="space-y-3">
+        <div class="p-2 rounded-xl bg-slate-800/80 border border-slate-700 space-y-1.5">
+          <div class="flex items-center gap-2">
+            <span class="text-xs text-slate-400 w-10">De:</span>
+            <select id="modalFromSelect" onchange="onModalRangeChange()" class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs text-white"></select>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="text-xs text-slate-400 w-10">Até:</span>
+            <select id="modalToSelect" onchange="onModalRangeChange()" class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs text-white"></select>
+          </div>
+          <span class="text-[10px] text-slate-400 block">Trecho selecionado: <strong id="modalSegmentDist" class="text-amber-400">0 m</strong></span>
+        </div>
+
+        <div>
+          <label class="text-[11px] font-semibold text-slate-400 block mb-1.5">Tipo de Via / Presets Rápidos:</label>
+          <div class="grid grid-cols-2 gap-2">
+            <button type="button" onclick="setModalSpeedPreset(80, 'paved')" class="p-2 rounded-xl bg-blue-900/30 hover:bg-blue-900/50 border border-blue-500/50 text-left flex flex-col gap-0.5">
+              <span class="text-xs font-bold text-blue-300 flex items-center gap-1.5"><i class="fa-solid fa-road"></i> Pavimentada</span>
+              <span class="text-[10px] text-blue-400">Asfalto (80 km/h)</span>
+            </button>
+            <button type="button" onclick="setModalSpeedPreset(40, 'unpaved')" class="p-2 rounded-xl bg-amber-900/30 hover:bg-amber-900/50 border border-amber-500/50 text-left flex flex-col gap-0.5">
+              <span class="text-xs font-bold text-amber-300 flex items-center gap-1.5"><i class="fa-solid fa-mound"></i> Não Pavimentada</span>
+              <span class="text-[10px] text-amber-400">Terra / Chão (40 km/h)</span>
+            </button>
+          </div>
+        </div>
+
+        <div>
+          <label class="text-[11px] font-semibold text-slate-400 block mb-1">Velocidade Máxima (km/h):</label>
+          <div class="flex items-center gap-2">
+            <input id="modalSpeedInput" type="number" min="5" max="150" value="80" class="w-32 bg-slate-800 border border-amber-500/60 rounded-xl px-3 py-2 text-base font-extrabold text-amber-300 font-mono focus:outline-none text-center">
+            <span class="text-xs font-bold text-slate-400">km/h</span>
+          </div>
+        </div>
+
+        <div class="flex flex-wrap gap-1.5">
+          <button type="button" onclick="setModalSpeedPreset(20)" class="px-2.5 py-1 rounded-lg bg-slate-800 border border-slate-700 text-xs font-bold text-rose-300">20</button>
+          <button type="button" onclick="setModalSpeedPreset(30)" class="px-2.5 py-1 rounded-lg bg-slate-800 border border-slate-700 text-xs font-bold text-rose-300">30</button>
+          <button type="button" onclick="setModalSpeedPreset(40)" class="px-2.5 py-1 rounded-lg bg-slate-800 border border-slate-700 text-xs font-bold text-amber-300">40</button>
+          <button type="button" onclick="setModalSpeedPreset(60)" class="px-2.5 py-1 rounded-lg bg-slate-800 border border-slate-700 text-xs font-bold text-blue-300">60</button>
+          <button type="button" onclick="setModalSpeedPreset(80)" class="px-2.5 py-1 rounded-lg bg-slate-800 border border-slate-700 text-xs font-bold text-blue-300">80</button>
+          <button type="button" onclick="setModalSpeedPreset(100)" class="px-2.5 py-1 rounded-lg bg-slate-800 border border-slate-700 text-xs font-bold text-blue-300">100</button>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+        <button onclick="closeSegmentSpeedModal()" class="px-3 py-1.5 rounded-xl bg-slate-800 text-slate-300 text-xs font-semibold">Cancelar</button>
+        <button onclick="confirmSegmentSpeedChange()" class="px-3.5 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold shadow flex items-center gap-1.5">
+          <i class="fa-solid fa-check"></i>
+          <span>Confirmar Velocidade</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Buscar Endereço -->
+  <div id="searchModal" class="hidden fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-3">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md shadow-2xl p-4 flex flex-col gap-3">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+        <h3 class="font-bold text-xs sm:text-sm text-white flex items-center gap-2">
+          <i class="fa-solid fa-magnifying-glass-location text-brand-400"></i>
+          Buscar Endereço / Local
+        </h3>
+        <button onclick="closeSearchModal()" class="w-7 h-7 rounded-lg bg-slate-800 text-slate-400 flex items-center justify-center">
+          <i class="fa-solid fa-xmark text-xs"></i>
+        </button>
+      </div>
+      <div class="flex gap-2">
+        <input id="searchInput" type="text" placeholder="Ex: Av. Paulista, São Paulo" class="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs sm:text-sm text-white focus:outline-none focus:border-brand-500" onkeydown="if(event.key === 'Enter') executeAddressSearch()">
+        <button onclick="executeAddressSearch()" class="px-3.5 py-2 rounded-xl bg-brand-600 text-white text-xs font-bold transition">
+          Buscar
+        </button>
+      </div>
+      <div id="searchResults" class="max-h-60 overflow-y-auto space-y-1.5 no-scrollbar text-xs">
+        <p class="text-slate-500 text-center py-4">Digite um local e clique em buscar.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Salvar / Atualizar Rota -->
+  <div id="saveModal" class="hidden fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-3">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-sm shadow-2xl p-4 flex flex-col gap-3">
+      <h3 class="font-bold text-sm text-white flex items-center gap-2">
+        <i class="fa-solid fa-cloud-arrow-up text-emerald-400"></i>
+        <span id="saveModalTitle">Gravar Rota</span>
+      </h3>
+
+      <div id="loadedRouteAlertBox" class="hidden p-2 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs">
+        <i class="fa-solid fa-pen-to-square mr-1"></i> Você está editando uma rota já existente no banco Oracle.
+      </div>
+
+      <div>
+        <label class="text-[11px] font-semibold text-slate-400 block mb-1">Nome da Rota:</label>
+        <input id="routeNameInput" type="text" placeholder="Ex: Rota Fazenda - Caminhões" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs sm:text-sm text-white focus:outline-none focus:border-brand-500">
+      </div>
+
+      <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-800 flex-wrap">
+        <button onclick="closeSaveModal()" class="px-3 py-1.5 rounded-xl bg-slate-800 text-slate-300 text-xs font-semibold">Cancelar</button>
+        <button id="btnSaveAsNew" onclick="confirmSaveCurrentRoute(true)" class="hidden px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold">
+          Salvar como Cópia
+        </button>
+        <button id="btnConfirmSave" onclick="confirmSaveCurrentRoute(false)" class="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow flex items-center gap-1.5">
+          <i class="fa-solid fa-check"></i>
+          <span id="btnConfirmSaveLabel">Salvar</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Cadastrar / Editar Cerca -->
+  <div id="saveFenceModal" class="hidden fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-3">
+    <div class="bg-slate-900 border border-rose-500/40 rounded-2xl w-full max-w-sm shadow-2xl p-4 flex flex-col gap-3">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+        <h3 class="font-bold text-sm text-white flex items-center gap-2">
+          <i class="fa-solid fa-draw-polygon text-rose-400"></i>
+          <span id="saveFenceModalTitle">Cadastrar Cerca de Restrição</span>
+        </h3>
+        <button onclick="closeSaveFenceModal()" class="w-7 h-7 rounded-lg bg-slate-800 text-slate-400 flex items-center justify-center">
+          <i class="fa-solid fa-xmark text-xs"></i>
+        </button>
+      </div>
+
+      <div class="space-y-2.5">
+        <div>
+          <label class="text-[11px] font-semibold text-slate-300 block mb-1">Identificação / Motivo da Restrição</label>
+          <input id="fenceNameInput" type="text" placeholder="Ex: Área Escolar / Obras na Via" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs sm:text-sm text-white focus:outline-none focus:border-rose-500">
+        </div>
+
+        <div>
+          <label class="text-[11px] font-semibold text-slate-300 block mb-1">Velocidade Máxima Permitida (km/h)</label>
+          <div class="flex items-center gap-2">
+            <input id="fenceSpeedInput" type="number" min="1" max="200" value="30" class="w-28 bg-slate-800 border border-rose-500/50 rounded-xl px-3 py-2 text-base font-extrabold text-rose-300 font-mono focus:outline-none focus:border-rose-500 text-center">
+            <span class="text-xs font-bold text-slate-400">km/h</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+        <button onclick="closeSaveFenceModal()" class="px-3 py-1.5 rounded-xl bg-slate-800 text-slate-300 text-xs font-semibold">Cancelar</button>
+        <button id="btnConfirmSaveFence" onclick="confirmSaveFence()" class="px-3.5 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold shadow flex items-center gap-1.5">
+          <i class="fa-solid fa-check"></i>
+          <span>Salvar Cerca</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Lista de Cercas Cadastradas -->
+  <div id="fenceListModal" class="hidden fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-3">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md shadow-2xl flex flex-col max-h-[80vh] overflow-hidden">
+      <div class="p-3.5 border-b border-slate-800 flex items-center justify-between">
+        <h3 class="font-bold text-xs sm:text-sm text-white flex items-center gap-2">
+          <i class="fa-solid fa-shield-halved text-rose-400"></i>
+          Cercas de Restrição Cadastradas
+        </h3>
+        <button onclick="closeFenceListModal()" class="w-7 h-7 rounded-lg bg-slate-800 text-slate-400 flex items-center justify-center">
+          <i class="fa-solid fa-xmark text-xs"></i>
+        </button>
+      </div>
+      <div id="savedFencesListContainer" class="p-3.5 overflow-y-auto space-y-2 no-scrollbar text-xs"></div>
+    </div>
+  </div>
+
+  <!-- MODAL: Gerenciador de Rotas -->
+  <div id="routeManagerModal" class="hidden fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-3">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg shadow-2xl flex flex-col max-h-[85vh] overflow-hidden">
+      <div class="p-3.5 border-b border-slate-800 flex items-center justify-between">
+        <h3 class="font-bold text-xs sm:text-sm text-white flex items-center gap-2">
+          <i class="fa-solid fa-database text-red-400"></i>
+          Rotas no Oracle Database & Arquivos
+        </h3>
+        <button onclick="toggleRouteManagerModal()" class="w-7 h-7 rounded-lg bg-slate-800 text-slate-400 flex items-center justify-center">
+          <i class="fa-solid fa-xmark text-xs"></i>
+        </button>
+      </div>
+
+      <div class="p-3.5 overflow-y-auto space-y-3.5 no-scrollbar">
+        <div class="grid grid-cols-3 gap-2">
+          <button onclick="exportRouteGPX()" class="py-2 px-2 rounded-xl bg-slate-800 border border-slate-700 text-xs font-semibold text-emerald-400 flex flex-col items-center justify-center gap-1 transition">
+            <i class="fa-solid fa-file-code text-sm"></i>
+            <span>Exportar GPX</span>
+          </button>
+          <button onclick="exportRouteJSON()" class="py-2 px-2 rounded-xl bg-slate-800 border border-slate-700 text-xs font-semibold text-brand-300 flex flex-col items-center justify-center gap-1 transition">
+            <i class="fa-solid fa-file-export text-sm"></i>
+            <span>Exportar JSON</span>
+          </button>
+          <label class="py-2 px-2 rounded-xl bg-slate-800 border border-slate-700 text-xs font-semibold text-amber-400 flex flex-col items-center justify-center gap-1 transition cursor-pointer text-center">
+            <i class="fa-solid fa-file-import text-sm"></i>
+            <span>Importar</span>
+            <input type="file" id="importFileInput" accept=".gpx,.json" class="hidden" onchange="handleFileUpload(event)">
+          </label>
+        </div>
+
+        <div>
+          <div class="flex items-center justify-between mb-2">
+            <h4 class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Rotas Salvas (Oracle XE)</h4>
+            <button onclick="fetchRoutesFromDatabase()" class="text-xs text-brand-400 hover:text-brand-300 font-semibold flex items-center gap-1">
+              <i class="fa-solid fa-arrows-rotate text-[10px]"></i> Atualizar
+            </button>
+          </div>
+          <div id="savedRoutesContainer" class="space-y-1.5"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="toastNotification" class="fixed top-14 left-1/2 -translate-x-1/2 z-50 transition-all duration-300 opacity-0 pointer-events-none transform -translate-y-4">
+    <div class="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-800/95 border border-slate-700 text-xs font-medium text-white shadow-2xl">
+      <i id="toastIcon" class="fa-solid fa-circle-check text-emerald-400"></i>
+      <span id="toastMessage">Alerta</span>
+    </div>
+  </div>
+
+  <script>
+    // ==========================================
+    // ⚙️ CONFIGURAÇÃO DA API LOCAL (ORACLE BACKEND)
+    // ==========================================
+    const API_BASE_URL = 'http://localhost:5000/api';
+
+    let map = null;
+    let waypoints = [];
+    let markersLayer = null;
+    let routeSegmentsLayer = null;
+    let progressPolyline = null;
+    let vehicleMarker = null;
+    let userCircleMarker = null;
+
+    let loadedRouteId = null;
+    let loadedRouteName = null;
+
+    // ESTADO DAS CERCAS
+    let fences = [];
+    let currentFencePoints = [];
+    let editingFenceId = null;
+    let savedFencesLayer = null;
+    let activeFenceLayer = null;
+    let lastAlertedFenceId = null;
+
+    // MODOS: 'edit' | 'speed' | 'fence' | 'nav'
+    let appMode = 'edit';
+    let navMethod = 'sim';
+    let travelProfile = 'car';
+
+    let currentTileLayer = null;
+    let activeLayerKey = 'streets';
+    let selectedSegmentIndex = null;
+
+    // CONTROLE DE TEMPOS E SIMULAÇÃO
+    let totalRouteDurationSeconds = 0;
+    let simElapsedSeconds = 0;
+
+    const BASE_LAYERS = {
+      streets: {
+        url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
+        options: { maxZoom: 19, attribution: 'Tiles &copy; Esri' }
+      },
+      satellite: {
+        url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+        options: { maxZoom: 19, attribution: 'Tiles &copy; Esri World Imagery' }
+      },
+      topo: {
+        url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
+        options: { maxZoom: 17, attribution: 'Map data &copy; OpenStreetMap, SRTM' }
+      },
+      cycle: {
+        url: 'https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png',
+        options: { maxZoom: 20, attribution: '&copy; CyclOSM' }
+      },
+      dark: {
+        url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+        options: { maxZoom: 19, subdomains: 'abcd', attribution: '&copy; CARTO' }
+      }
+    };
+
+    let simPlaying = false;
+    let simSpeedMultiplier = 1;
+    let simProgress = 0;
+    let simAnimFrame = null;
+    let simLastTimestamp = null;
+    let followVehicle = true;
+    let interpolatedPoints = [];
+    let cumulativeDistances = [];
+    let totalRouteDistanceMeters = 0;
+    let lastSignaledWaypoint = -1;
+    let maneuvers = [];
+    let segLines = [];
+    let segBadges = [];
+    let dragKeep = null;
+    let voiceOn = true;
+    let spokenManeuver = -1;
+    let arrivalSpoken = false;
+
+    let realGpsWatchId = null;
+    let audioContext = null;
+
+    function getAudioContext() {
+      if (!audioContext) {
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      if (audioContext.state === 'suspended') {
+        audioContext.resume();
+      }
+      return audioContext;
+    }
+
+    function playTone(type) {
+      try {
+        const ctx = getAudioContext();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        const now = ctx.currentTime;
+
+        if (type === 'start') {
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(440, now);
+          osc.frequency.exponentialRampToValueAtTime(880, now + 0.25);
+          gain.gain.setValueAtTime(0.2, now);
+          gain.gain.exponentialRampToValueAtTime(0.01, now + 0.35);
+          osc.start(now);
+          osc.stop(now + 0.35);
+        } else if (type === 'waypoint') {
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(659, now);
+          osc.frequency.setValueAtTime(880, now + 0.1);
+          gain.gain.setValueAtTime(0.25, now);
+          gain.gain.exponentialRampToValueAtTime(0.01, now + 0.25);
+          osc.start(now);
+          osc.stop(now + 0.25);
+        } else if (type === 'fence') {
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(520, now);
+          osc.frequency.setValueAtTime(380, now + 0.12);
+          gain.gain.setValueAtTime(0.22, now);
+          gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+          osc.start(now);
+          osc.stop(now + 0.3);
+        } else if (type === 'finish') {
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(523.25, now);
+          osc.frequency.setValueAtTime(659.25, now + 0.12);
+          osc.frequency.setValueAtTime(783.99, now + 0.24);
+          osc.frequency.setValueAtTime(1046.50, now + 0.36);
+          gain.gain.setValueAtTime(0.25, now);
+          gain.gain.exponentialRampToValueAtTime(0.01, now + 0.7);
+          osc.start(now);
+          osc.stop(now + 0.7);
+        }
+      } catch (e) {}
+    }
+
+    function formatDuration(totalSeconds) {
+      const sec = Math.max(0, Math.round(totalSeconds));
+      const h = Math.floor(sec / 3600);
+      const m = Math.floor((sec % 3600) / 60);
+      const s = sec % 60;
+      if (h > 0) {
+        return `${h}h ${String(m).padStart(2, '0')}m`;
+      }
+      return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+    }
+
+    window.addEventListener('load', () => {
+      initMap();
+      initVoiceButton();
+      fetchRoutesFromDatabase();
+      loadFencesData();
+    });
+
+    function initMap() {
+      const defaultCenter = [-23.5505, -46.6333];
+
+      map = L.map('map', {
+        zoomControl: false,
+        attributionControl: false,
+        tap: false
+      }).setView(defaultCenter, 14);
+
+      switchBaseLayer('streets');
+
+      savedFencesLayer = L.layerGroup().addTo(map);
+      activeFenceLayer = L.layerGroup().addTo(map);
+      routeSegmentsLayer = L.layerGroup().addTo(map);
+      markersLayer = L.layerGroup().addTo(map);
+
+      progressPolyline = L.polyline([], {
+        color: '#10b981',
+        weight: 7,
+        opacity: 0.95,
+        lineCap: 'round',
+        lineJoin: 'round'
+      }).addTo(map);
+
+      map.on('click', onMapClick);
+      map.on('zoomend', () => { if (appMode === 'edit' && waypoints.length) refreshRouteVisuals(); });
+
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          pos => { map.setView([pos.coords.latitude, pos.coords.longitude], 15); },
+          () => {}
+        );
+      }
+    }
+
+    function onMapClick(e) {
+      if (appMode === 'edit') {
+        addWaypoint(e.latlng.lat, e.latlng.lng);
+      } else if (appMode === 'fence') {
+        addFenceVertex(e.latlng.lat, e.latlng.lng);
+      }
+    }
+
+    // ==========================================
+    // 🛣️ VELOCIDADES POR TRECHO (SEGMENTAÇÃO)
+    // ==========================================
+    function getSegmentColor(speed) {
+      if (speed <= 30) return '#ef4444';
+      if (speed <= 50) return '#f59e0b';
+      return '#3b82f6';
+    }
+
+    let speedAnchor = null;
+
+    function fmtDist(d) {
+      return d >= 1000 ? `${(d / 1000).toFixed(2)} km` : `${Math.round(d)} m`;
+    }
+
+    function openSegmentSpeedModal(from, to) {
+      if (waypoints.length < 2) return;
+      if (to === undefined) to = from + 1;
+      from = Math.max(0, Math.min(from, waypoints.length - 2));
+      to = Math.max(from + 1, Math.min(to, waypoints.length - 1));
+      selectedSegmentIndex = from;
+
+      const fromSel = document.getElementById('modalFromSelect');
+      const toSel = document.getElementById('modalToSelect');
+      fromSel.innerHTML = '';
+      toSel.innerHTML = '';
+      waypoints.forEach((_, i) => {
+        const label = i === 0 ? 'Ponto 1 (início)' : (i === waypoints.length - 1 ? `Ponto ${i + 1} (fim)` : `Ponto ${i + 1}`);
+        fromSel.add(new Option(label, i));
+        toSel.add(new Option(label, i));
+      });
+      fromSel.value = from;
+      toSel.value = to;
+
+      const currentSpeed = waypoints[from].speedLimit || (travelProfile === 'car' ? 80 : 5);
+      document.getElementById('modalSpeedInput').value = currentSpeed;
+      onModalRangeChange();
+
+      document.getElementById('segmentSpeedModal').classList.remove('hidden');
+    }
+
+    function onModalRangeChange() {
+      let a = parseInt(document.getElementById('modalFromSelect').value, 10);
+      let b = parseInt(document.getElementById('modalToSelect').value, 10);
+      if (a > b) { const t = a; a = b; b = t; }
+      let d = 0;
+      for (let i = a; i < b; i++) {
+        d += distanceInMeters(waypoints[i].lat, waypoints[i].lng, waypoints[i + 1].lat, waypoints[i + 1].lng);
+      }
+      document.getElementById('modalSegmentDist').innerText = a === b ? 'selecione pontos diferentes' : fmtDist(d);
+    }
+
+    function closeSegmentSpeedModal() {
+      document.getElementById('segmentSpeedModal').classList.add('hidden');
+      selectedSegmentIndex = null;
+      speedAnchor = null;
+      if (appMode === 'speed') refreshRouteVisuals();
+    }
+
+    function setModalSpeedPreset(speed, roadType) {
+      document.getElementById('modalSpeedInput').value = speed;
+    }
+
+    function confirmSegmentSpeedChange() {
+      let a = parseInt(document.getElementById('modalFromSelect').value, 10);
+      let b = parseInt(document.getElementById('modalToSelect').value, 10);
+      if (a > b) { const t = a; a = b; b = t; }
+      if (a === b) { notify('Escolha pontos diferentes em "De" e "Até"', 'warning'); return; }
+
+      const speed = Math.max(5, parseInt(document.getElementById('modalSpeedInput').value, 10) || 80);
+      const roadType = speed <= 50 ? 'unpaved' : 'paved';
+
+      for (let i = a; i < b; i++) {
+        waypoints[i].speedLimit = speed;
+        waypoints[i].roadType = roadType;
+      }
+
+      closeSegmentSpeedModal();
+      notify(`${speed} km/h aplicado do ponto ${a + 1} ao ${b + 1}`, 'success');
+    }
+
+    function onSpeedPointClick(index) {
+      if (speedAnchor === null) {
+        speedAnchor = index;
+        refreshRouteVisuals();
+        notify(`Ponto ${index + 1} marcado. Agora toque no ponto final do trecho.`, 'info');
+        return;
+      }
+      if (speedAnchor === index) {
+        speedAnchor = null;
+        refreshRouteVisuals();
+        notify('Seleção cancelada', 'info');
+        return;
+      }
+      const a = Math.min(speedAnchor, index);
+      const b = Math.max(speedAnchor, index);
+      openSegmentSpeedModal(a, b);
+    }
+
+    function applyBatchSpeedToAll(speed, roadType) {
+      if (waypoints.length < 2) {
+        notify('Trace pontos primeiro!', 'warning');
+        return;
+      }
+      waypoints.forEach((p, idx) => {
+        if (idx < waypoints.length - 1) {
+          p.speedLimit = speed;
+          p.roadType = roadType;
+        }
+      });
+      refreshRouteVisuals();
+      notify(`Toda a rota alterada para ${speed} km/h (${roadType === 'paved' ? 'Pavimentada' : 'Terra'})!`, 'info');
+    }
+
+    // ==========================================
+    // 📍 FUNÇÕES DE ROTA
+    // ==========================================
+    function addWaypoint(lat, lng) {
+      waypoints.push({
+        lat,
+        lng,
+        speedLimit: travelProfile === 'car' ? 80 : 5,
+        roadType: 'paved'
+      });
+      refreshRouteVisuals();
+    }
+
+    function undoLastWaypoint() {
+      if (waypoints.length === 0) return;
+      waypoints.pop();
+      refreshRouteVisuals();
+      notify('Último ponto removido', 'info');
+    }
+
+    function reverseRoute() {
+      if (waypoints.length < 2) {
+        notify('Adicione ao menos 2 pontos para inverter', 'warning');
+        return;
+      }
+      waypoints.reverse();
+      refreshRouteVisuals();
+      notify('Sentido da rota invertido', 'info');
+    }
+
+    function clearCurrentRoute() {
+      if (waypoints.length === 0) return;
+      waypoints = [];
+      unlinkLoadedRoute();
+      refreshRouteVisuals();
+      notify('Rota limpa com sucesso', 'info');
+    }
+
+    function distanceInMeters(lat1, lon1, lat2, lon2) {
+      const R = 6371e3;
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLon = (lon2 - lon1) * Math.PI / 180;
+      const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                Math.sin(dLon / 2) * Math.sin(dLon / 2);
+      return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+    }
+
+    function calculateBearing(lat1, lon1, lat2, lon2) {
+      const toRad = Math.PI / 180;
+      const dLon = (lon2 - lon1) * toRad;
+      const y = Math.sin(dLon) * Math.cos(lat2 * toRad);
+      const x = Math.cos(lat1 * toRad) * Math.sin(lat2 * toRad) -
+                Math.sin(lat1 * toRad) * Math.cos(lat2 * toRad) * Math.cos(dLon);
+      return ((Math.atan2(y, x) * (180 / Math.PI)) + 360) % 360;
+    }
+
+    function refreshRouteVisuals() {
+      segLines = [];
+      segBadges = [];
+      markersLayer.eachLayer(l => { if (!dragKeep || l !== dragKeep.marker) markersLayer.removeLayer(l); });
+      routeSegmentsLayer.clearLayers();
+      progressPolyline.setLatLngs([]);
+
+      let totalM = 0;
+      for (let i = 0; i < waypoints.length - 1; i++) {
+        const p1 = waypoints[i];
+        const p2 = waypoints[i + 1];
+        const segDist = distanceInMeters(p1.lat, p1.lng, p2.lat, p2.lng);
+        totalM += segDist;
+
+        const speed = p1.speedLimit || (travelProfile === 'car' ? 80 : 5);
+        const segColor = getSegmentColor(speed);
+
+        const segLine = L.polyline([[p1.lat, p1.lng], [p2.lat, p2.lng]], {
+          color: segColor,
+          weight: 6,
+          opacity: 0.88,
+          lineCap: 'round',
+          lineJoin: 'round'
+        }).addTo(routeSegmentsLayer);
+
+        segLine.on('click', (ev) => {
+          L.DomEvent.stopPropagation(ev);
+          if (appMode === 'speed') openSegmentSpeedModal(i, i + 1);
+        });
+
+        segLines[i] = segLine;
+
+        if (appMode === 'edit' && !dragKeep &&
+            map.latLngToLayerPoint([p1.lat, p1.lng]).distanceTo(map.latLngToLayerPoint([p2.lat, p2.lng])) >= 36) {
+          const hl = [p1.lat + (p2.lat - p1.lat) * 0.35, p1.lng + (p2.lng - p1.lng) * 0.35];
+          const h = L.marker(hl, {
+            icon: L.divIcon({ html: '<div class="mid-handle"></div>', className: '', iconSize: [14, 14], iconAnchor: [7, 7] }),
+            draggable: true,
+            zIndexOffset: 300
+          }).addTo(markersLayer);
+          h.on('click', () => { insertWaypointAt(i + 1, h.getLatLng()); refreshRouteVisuals(); });
+          h.on('dragstart', () => startInsertDrag(h, i));
+          h.on('drag', () => {
+            if (!dragKeep || dragKeep.marker !== h) return;
+            const ll = h.getLatLng(), w = waypoints[dragKeep.index];
+            w.lat = ll.lat; w.lng = ll.lng;
+            liveUpdateSegments(dragKeep.index);
+          });
+          h.on('dragend', () => { dragKeep = null; setTimeout(refreshRouteVisuals, 0); });
+        }
+      }
+
+      totalRouteDistanceMeters = totalM;
+
+      let runStart = 0;
+      for (let i = 1; i <= waypoints.length - 1; i++) {
+        const sameAsPrev = i < waypoints.length - 1 &&
+          (waypoints[i].speedLimit || 80) === (waypoints[runStart].speedLimit || 80) &&
+          (waypoints[i].roadType || 'paved') === (waypoints[runStart].roadType || 'paved');
+        if (sameAsPrev) continue;
+
+        const first = waypoints[runStart];
+        const speed = first.speedLimit || (travelProfile === 'car' ? 80 : 5);
+        let runLen = 0;
+        const lens = [];
+        for (let k = runStart; k < i; k++) {
+          const d = distanceInMeters(waypoints[k].lat, waypoints[k].lng, waypoints[k + 1].lat, waypoints[k + 1].lng);
+          lens.push(d); runLen += d;
+        }
+
+        let target = runLen / 2, acc = 0, pos = [first.lat, first.lng];
+        for (let k = 0; k < lens.length; k++) {
+          if (acc + lens[k] >= target) {
+            const r = lens[k] ? (target - acc) / lens[k] : 0;
+            const a = waypoints[runStart + k], b = waypoints[runStart + k + 1];
+            pos = [a.lat + (b.lat - a.lat) * r, a.lng + (b.lng - a.lng) * r];
+            break;
+          }
+          acc += lens[k];
+        }
+
+        const badgeClass = first.roadType === 'unpaved' ? 'badge-unpaved' : (speed <= 30 ? 'badge-slow' : 'badge-paved');
+        const badgeHtml = `
+          <div class="segment-speed-badge ${badgeClass}">
+            <i class="fa-solid fa-gauge text-[8px]"></i>
+            <span>${speed} km/h</span>
+          </div>
+        `;
+        const from = runStart, to = i;
+        const badgeMarker = L.marker(pos, {
+          icon: L.divIcon({ html: badgeHtml, className: '', iconSize: [0, 0] }),
+          interactive: appMode === 'speed'
+        }).addTo(routeSegmentsLayer);
+        badgeMarker.on('click', (ev) => {
+          L.DomEvent.stopPropagation(ev);
+          if (appMode === 'speed') openSegmentSpeedModal(from, to);
+        });
+        runStart = i;
+      }
+
+      waypoints.forEach((pt, index) => {
+        const isStart = index === 0;
+        const isEnd = index === waypoints.length - 1 && waypoints.length > 1;
+
+        let bg = 'bg-brand-600';
+        let label = `${index + 1}`;
+        let size = 26;
+
+        if (isStart) {
+          bg = 'bg-emerald-500';
+          label = '<i class="fa-solid fa-play text-[9px]"></i>';
+          size = 28;
+        } else if (isEnd) {
+          bg = 'bg-rose-500';
+          label = '<i class="fa-solid fa-flag-checkered text-[10px]"></i>';
+          size = 28;
+        }
+
+        const manIcon = (pt.maneuver && MAN_ICONS[pt.maneuver])
+          ? `<div style="position:absolute;top:-10px;right:-10px;width:18px;height:18px;border-radius:9999px;background:#f59e0b;border:2px solid #fff;color:#fff;font-size:9px;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,.5)"><i class="${MAN_ICONS[pt.maneuver]}"></i></div>`
+          : '';
+        const anchorRing = (appMode === 'speed' && speedAnchor === index) ? 'ring-4 ring-amber-400' : '';
+        const iconHtml = `<div style="position:relative;width:${size}px;height:${size}px"><div class="custom-marker-pin ${bg} ${anchorRing}" style="width: ${size}px; height: ${size}px; font-size: ${size * 0.4}px;">${label}</div>${manIcon}</div>`;
+        const icon = L.divIcon({
+          html: iconHtml,
+          className: '',
+          iconSize: [size, size],
+          iconAnchor: [size / 2, size / 2]
+        });
+
+        if (dragKeep && dragKeep.index === index) return;
+        const marker = L.marker([pt.lat, pt.lng], { icon, draggable: appMode === 'edit', zIndexOffset: 500 }).addTo(markersLayer);
+        marker.on('drag', ev => {
+          const ll = ev.target.getLatLng();
+          pt.lat = ll.lat; pt.lng = ll.lng;
+          liveUpdateSegments(index);
+        });
+        marker.on('dragend', () => setTimeout(refreshRouteVisuals, 0));
+        if (appMode === 'speed') {
+          marker.on('click', (ev) => { L.DomEvent.stopPropagation(ev); onSpeedPointClick(index); });
+        } else {
+          marker.bindPopup(waypointPopupHtml(index));
+        }
+      });
+
+      document.getElementById('routePointsCount').innerText = `${waypoints.length} pts`;
+      if (totalM >= 1000) {
+        document.getElementById('routeTotalDistance').innerText = `${(totalM / 1000).toFixed(2)} km`;
+        document.getElementById('simTotalDist').innerText = `${(totalM / 1000).toFixed(2)} km`;
+      } else {
+        document.getElementById('routeTotalDistance').innerText = `${Math.round(totalM)} m`;
+        document.getElementById('simTotalDist').innerText = `${Math.round(totalM)} m`;
+      }
+
+      updateEstimatedTime();
+      updateSaveButtonsLabels();
+    }
+
+    function setTravelProfile(profile) {
+      travelProfile = profile;
+      ['walk', 'car'].forEach(p => {
+        const btn = document.getElementById('prof' + p.charAt(0).toUpperCase() + p.slice(1));
+        if (btn) {
+          if (p === profile) {
+            btn.className = 'w-7 h-7 flex items-center justify-center rounded bg-brand-600 text-white font-bold transition';
+          } else {
+            btn.className = 'w-7 h-7 flex items-center justify-center rounded text-slate-400 hover:text-white transition';
+          }
+        }
+      });
+      updateEstimatedTime();
+    }
+
+    function updateEstimatedTime() {
+      let totalSeconds = 0;
+
+      if (waypoints.length >= 2) {
+        for (let i = 0; i < waypoints.length - 1; i++) {
+          const p1 = waypoints[i];
+          const p2 = waypoints[i + 1];
+          const segDistMeters = distanceInMeters(p1.lat, p1.lng, p2.lat, p2.lng);
+          const midLat = (p1.lat + p2.lat) / 2;
+          const midLng = (p1.lng + p2.lng) / 2;
+          
+          const segmentSpeed = p1.speedLimit || (travelProfile === 'car' ? 80 : 5);
+          const fence = getActiveFenceForPoint(midLat, midLng);
+          const effectiveSpeed = fence ? Math.min(segmentSpeed, fence.speedLimitKmh) : segmentSpeed;
+          const speedMetersPerSec = (effectiveSpeed * 1000) / 3600;
+
+          totalSeconds += segDistMeters / (speedMetersPerSec || 1);
+        }
+      }
+
+      totalRouteDurationSeconds = totalSeconds;
+      const formatted = formatDuration(totalSeconds);
+
+      document.getElementById('routeETA').innerText = formatted;
+      document.getElementById('navRemainingTime').innerText = formatted;
+    }
+
+    function generateInterpolatedRoute() {
+      interpolatedPoints = [];
+      cumulativeDistances = [0];
+
+      if (waypoints.length < 2) { maneuvers = []; return; }
+
+      const STEP = 2.5;
+
+      for (let i = 0; i < waypoints.length - 1; i++) {
+        const p1 = waypoints[i];
+        const p2 = waypoints[i+1];
+        const segDist = distanceInMeters(p1.lat, p1.lng, p2.lat, p2.lng);
+        const steps = Math.max(1, Math.floor(segDist / STEP));
+
+        for (let s = (i === 0 ? 0 : 1); s <= steps; s++) {
+          const ratio = s / steps;
+          const lat = p1.lat + (p2.lat - p1.lat) * ratio;
+          const lng = p1.lng + (p2.lng - p1.lng) * ratio;
+          interpolatedPoints.push({
+            lat,
+            lng,
+            segmentIndex: i,
+            speedLimit: p1.speedLimit || (travelProfile === 'car' ? 80 : 5),
+            roadType: p1.roadType || 'paved'
+          });
+
+          if (interpolatedPoints.length > 1) {
+            const prev = interpolatedPoints[interpolatedPoints.length - 2];
+            const d = distanceInMeters(prev.lat, prev.lng, lat, lng);
+            cumulativeDistances.push(cumulativeDistances[cumulativeDistances.length - 1] + d);
+          }
+        }
+      }
+      buildManeuvers();
+      spokenManeuver = -1;
+    }
+
+    function setAppMode(mode) {
+      const btnEdit = document.getElementById('btnModeEdit');
+      const btnSpeed = document.getElementById('btnModeSpeed');
+      const btnFence = document.getElementById('btnModeFence');
+      const btnNav = document.getElementById('btnModeNav');
+
+      const editToolbar = document.getElementById('editToolbar');
+      const speedToolbar = document.getElementById('speedToolbar');
+      const fenceToolbar = document.getElementById('fenceToolbar');
+      const navControlPanel = document.getElementById('navControlPanel');
+      const navHud = document.getElementById('navHud');
+
+      const inactiveClass = 'px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-lg text-[11px] sm:text-xs font-bold flex items-center gap-1 transition-all text-slate-400 hover:text-white';
+      const activeBrandClass = 'px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-lg text-[11px] sm:text-xs font-bold flex items-center gap-1 transition-all bg-brand-600 text-white shadow';
+      const activeAmberClass = 'px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-lg text-[11px] sm:text-xs font-bold flex items-center gap-1 transition-all bg-amber-600 text-white shadow';
+      const activeFenceClass = 'px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-lg text-[11px] sm:text-xs font-bold flex items-center gap-1 transition-all bg-rose-600 text-white shadow';
+
+      if ((mode === 'speed' || mode === 'nav') && waypoints.length < 2) {
+        notify('Desenhe pelo menos 2 pontos antes!', 'warning');
+        return;
+      }
+
+      appMode = mode;
+      speedAnchor = null;
+      if (waypoints.length) refreshRouteVisuals();
+
+      btnEdit.className = inactiveClass;
+      btnSpeed.className = inactiveClass;
+      btnFence.className = inactiveClass;
+      btnNav.className = inactiveClass;
+
+      editToolbar.classList.add('hidden');
+      speedToolbar.classList.add('hidden');
+      fenceToolbar.classList.add('hidden');
+      navControlPanel.classList.add('hidden');
+      navHud.classList.add('hidden');
+
+      if (mode === 'edit') {
+        btnEdit.className = activeBrandClass;
+        editToolbar.classList.remove('hidden');
+        notify('Arraste os pontos para ajustar. Toque num ponto para definir a instrução de voz.', 'info');
+        clearCurrentFenceDraft();
+        stopSim();
+        stopRealGps();
+        removeVehicle();
+      } else if (mode === 'speed') {
+        btnSpeed.className = activeAmberClass;
+        speedToolbar.classList.remove('hidden');
+        clearCurrentFenceDraft();
+        stopSim();
+        stopRealGps();
+        removeVehicle();
+        notify('Modo Velocidade: toque no ponto inicial e no final do trecho (ou direto na linha)', 'info');
+      } else if (mode === 'fence') {
+        btnFence.className = activeFenceClass;
+        fenceToolbar.classList.remove('hidden');
+        stopSim();
+        stopRealGps();
+        removeVehicle();
+        renderSavedFences();
+        notify('Modo Cerca: Clique no mapa para desenhar o polígono de restrição', 'info');
+      } else if (mode === 'nav') {
+        btnNav.className = activeBrandClass;
+        navControlPanel.classList.remove('hidden');
+        navHud.classList.remove('hidden');
+        clearCurrentFenceDraft();
+        generateInterpolatedRoute();
+        createVehicle();
+        playTone('start');
+        notify('Navegação ativada!', 'success');
+      }
+    }
+
+    function startNavigation() {
+      if (waypoints.length < 2) {
+        notify('Desenhe pelo menos 2 pontos na rota!', 'warning');
+        return;
+      }
+      setAppMode('nav');
+      if (navMethod === 'sim') {
+        startSim();
+      } else {
+        startRealGps();
+      }
+    }
+
+    function exitNavigation() {
+      setAppMode('edit');
+    }
+
+    // ==========================================
+    // 🛑 FUNÇÕES DE CERCAS
+    // ==========================================
+    function addFenceVertex(lat, lng) {
+      currentFencePoints.push({ lat, lng });
+      refreshActiveFenceVisuals();
+    }
+
+    function undoLastFencePoint() {
+      if (currentFencePoints.length === 0) return;
+      currentFencePoints.pop();
+      refreshActiveFenceVisuals();
+      notify('Último vértice da cerca removido', 'info');
+    }
+
+    function clearCurrentFenceDraft() {
+      currentFencePoints = [];
+      editingFenceId = null;
+      document.getElementById('fenceEditStatus').innerText = 'Desenhando Nova Cerca';
+      document.getElementById('btnSaveFenceLabel').innerText = 'Definir km/h & Salvar';
+      document.getElementById('btnDeleteEditingFence').classList.add('hidden');
+      document.getElementById('btnDeleteEditingFence').classList.remove('flex');
+      refreshActiveFenceVisuals();
+      renderSavedFences();
+    }
+
+    function refreshActiveFenceVisuals() {
+      activeFenceLayer.clearLayers();
+      document.getElementById('fencePointsCount').innerText = `${currentFencePoints.length} vértices`;
+
+      if (currentFencePoints.length === 0) return;
+
+      const latlngs = currentFencePoints.map(p => [p.lat, p.lng]);
+
+      if (currentFencePoints.length >= 3) {
+        L.polygon(latlngs, {
+          color: '#ef4444',
+          weight: 3,
+          dashArray: '6, 6',
+          fillColor: '#ef4444',
+          fillOpacity: 0.35
+        }).addTo(activeFenceLayer);
+      } else if (currentFencePoints.length === 2) {
+        L.polyline(latlngs, {
+          color: '#ef4444',
+          weight: 3,
+          dashArray: '6, 6'
+        }).addTo(activeFenceLayer);
+      }
+
+      currentFencePoints.forEach((pt, idx) => {
+        const vertexIcon = L.divIcon({
+          html: `<div class="fence-vertex-handle" title="Arraste ou clique para remover"></div>`,
+          className: '',
+          iconSize: [16, 16],
+          iconAnchor: [8, 8]
+        });
+
+        const marker = L.marker([pt.lat, pt.lng], {
+          icon: vertexIcon,
+          draggable: true,
+          zIndexOffset: 1000
+        }).addTo(activeFenceLayer);
+
+        marker.on('drag', (ev) => {
+          const newPos = ev.target.getLatLng();
+          currentFencePoints[idx] = { lat: newPos.lat, lng: newPos.lng };
+          activeFenceLayer.eachLayer(layer => {
+            if (layer instanceof L.Polygon || layer instanceof L.Polyline) {
+              layer.setLatLngs(currentFencePoints.map(p => [p.lat, p.lng]));
+            }
+          });
+        });
+
+        marker.on('dragend', () => {
+          refreshActiveFenceVisuals();
+          updateEstimatedTime();
+        });
+
+        marker.on('click', (ev) => {
+          L.DomEvent.stopPropagation(ev);
+          if (currentFencePoints.length <= 3 && editingFenceId) {
+            notify('Mínimo de 3 vértices necessários', 'warning');
+            return;
+          }
+          currentFencePoints.splice(idx, 1);
+          refreshActiveFenceVisuals();
+          notify(`Vértice ${idx + 1} removido`, 'info');
+        });
+      });
+    }
+
+    function getPolygonCentroid(pts) {
+      let latSum = 0, lngSum = 0;
+      pts.forEach(p => {
+        latSum += p.lat;
+        lngSum += p.lng;
+      });
+      return [latSum / pts.length, lngSum / pts.length];
+    }
+
+    function renderSavedFences() {
+      savedFencesLayer.clearLayers();
+      document.getElementById('btnFenceCountBadge').innerText = fences.length;
+
+      fences.forEach(fence => {
+        if (fence.id === editingFenceId) return;
+
+        const latlngs = fence.points.map(p => [p.lat, p.lng]);
+        const poly = L.polygon(latlngs, {
+          color: '#ef4444',
+          weight: 2.5,
+          opacity: 0.9,
+          fillColor: '#ef4444',
+          fillOpacity: 0.35
+        }).addTo(savedFencesLayer);
+
+        const center = getPolygonCentroid(fence.points);
+        const badgeHtml = `
+          <div class="fence-speed-badge" title="${fence.name}">
+            <i class="fa-solid fa-gauge-high text-[10px]"></i>
+            <span>${fence.speedLimitKmh} km/h</span>
+          </div>
+        `;
+        const badgeMarker = L.marker(center, {
+          icon: L.divIcon({ html: badgeHtml, className: '', iconSize: [0, 0] })
+        }).addTo(savedFencesLayer);
+
+        const handleFenceSelect = (ev) => {
+          L.DomEvent.stopPropagation(ev);
+          if (appMode === 'fence') {
+            startEditingExistingFence(fence.id);
+          } else {
+            poly.bindPopup(`
+              <div class="text-slate-900 text-xs p-1">
+                <p class="font-extrabold text-rose-600 flex items-center gap-1">
+                  <i class="fa-solid fa-triangle-exclamation"></i> ${fence.name}
+                </p>
+                <p class="font-bold mt-1">Limite: <span class="text-rose-600">${fence.speedLimitKmh} km/h</span></p>
+                <button onclick="switchToFenceAndEdit('${fence.id}')" class="mt-2 w-full px-2 py-1 bg-rose-600 text-white rounded font-bold text-[10px]">
+                  Editar Cerca
+                </button>
+              </div>
+            `).openPopup();
+          }
+        };
+
+        poly.on('click', handleFenceSelect);
+        badgeMarker.on('click', handleFenceSelect);
+      });
+
+      updateEstimatedTime();
+    }
+
+    function switchToFenceAndEdit(fenceId) {
+      map.closePopup();
+      setAppMode('fence');
+      startEditingExistingFence(fenceId);
+    }
+
+    function startEditingExistingFence(fenceId) {
+      const found = fences.find(f => f.id === fenceId);
+      if (!found) return;
+
+      editingFenceId = found.id;
+      currentFencePoints = found.points.map(p => ({ lat: p.lat, lng: p.lng }));
+
+      document.getElementById('fenceEditStatus').innerText = `Editando: ${found.name}`;
+      document.getElementById('btnSaveFenceLabel').innerText = 'Atualizar Cerca';
+      document.getElementById('btnDeleteEditingFence').classList.remove('hidden');
+      document.getElementById('btnDeleteEditingFence').classList.add('flex');
+
+      renderSavedFences();
+      refreshActiveFenceVisuals();
+      notify(`Editando "${found.name}".`, 'info');
+    }
+
+    function openSaveFenceModal() {
+      if (currentFencePoints.length < 3) {
+        notify('Desenhe pelo menos 3 vértices para formar a cerca!', 'warning');
+        return;
+      }
+
+      if (editingFenceId) {
+        const existing = fences.find(f => f.id === editingFenceId);
+        if (existing) {
+          document.getElementById('saveFenceModalTitle').innerText = 'Editar Cerca de Restrição';
+          document.getElementById('fenceNameInput').value = existing.name;
+          document.getElementById('fenceSpeedInput').value = existing.speedLimitKmh;
+        }
+      } else {
+        document.getElementById('saveFenceModalTitle').innerText = 'Cadastrar Cerca de Restrição';
+        document.getElementById('fenceNameInput').value = `Restrição #${fences.length + 1}`;
+        document.getElementById('fenceSpeedInput').value = 30;
+      }
+
+      document.getElementById('saveFenceModal').classList.remove('hidden');
+    }
+
+    function closeSaveFenceModal() {
+      document.getElementById('saveFenceModal').classList.add('hidden');
+    }
+
+    // ==========================================
+    // 💾 BANCO ORACLE: CERCAS
+    // ==========================================
+    async function confirmSaveFence() {
+      const name = document.getElementById('fenceNameInput').value.trim() || 'Restrição';
+      const speedLimitKmh = Math.max(1, parseInt(document.getElementById('fenceSpeedInput').value, 10) || 30);
+
+      const payload = {
+        name,
+        speed_limit_kmh: speedLimitKmh,
+        points: currentFencePoints.map(p => ({ lat: p.lat, lng: p.lng }))
+      };
+
+      if (editingFenceId) {
+        const idx = fences.findIndex(f => f.id === editingFenceId);
+        if (idx !== -1) {
+          fences[idx].name = name;
+          fences[idx].speedLimitKmh = speedLimitKmh;
+          fences[idx].points = payload.points;
+        }
+        notify(`Cerca "${name}" atualizada!`, 'success');
+      } else {
+        try {
+          const res = await fetch(`${API_BASE_URL}/fences`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+          const data = await res.json();
+          const newFence = {
+            id: data.id ? String(data.id) : ('fnc_' + Date.now()),
+            name,
+            speedLimitKmh,
+            points: payload.points
+          };
+          fences.unshift(newFence);
+          notify(`Cerca "${name}" gravada no Oracle!`, 'success');
+        } catch (e) {
+          notify('Erro ao salvar cerca no Oracle DB', 'danger');
+        }
+      }
+
+      persistFencesLocally();
+      closeSaveFenceModal();
+      clearCurrentFenceDraft();
+      renderSavedFences();
+    }
+
+    function deleteCurrentlyEditingFence() {
+      if (!editingFenceId) return;
+      deleteFenceById(editingFenceId);
+      clearCurrentFenceDraft();
+    }
+
+    async function deleteFenceById(fenceId) {
+      fences = fences.filter(f => f.id !== fenceId);
+      persistFencesLocally();
+
+      try {
+        await fetch(`${API_BASE_URL}/fences/${fenceId}`, { method: 'DELETE' });
+      } catch (e) {}
+
+      if (editingFenceId === fenceId) {
+        clearCurrentFenceDraft();
+      } else {
+        renderSavedFences();
+      }
+      renderFenceListItems();
+      notify('Cerca removida!', 'info');
+    }
+
+    function persistFencesLocally() {
+      localStorage.setItem('geonav_fences', JSON.stringify(fences));
+    }
+
+    async function loadFencesData() {
+      const local = JSON.parse(localStorage.getItem('geonav_fences') || '[]');
+      fences = local;
+
+      try {
+        const res = await fetch(`${API_BASE_URL}/fences`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.length > 0) {
+            fences = data.map(row => ({
+              id: String(row.id),
+              name: row.name || 'Restrição',
+              speedLimitKmh: row.speed_limit_kmh || 30,
+              points: row.points || []
+            }));
+            persistFencesLocally();
+          }
+        }
+      } catch (e) {}
+
+      renderSavedFences();
+    }
+
+    function openFenceListModal() {
+      renderFenceListItems();
+      document.getElementById('fenceListModal').classList.remove('hidden');
+    }
+
+    function closeFenceListModal() {
+      document.getElementById('fenceListModal').classList.add('hidden');
+    }
+
+    function renderFenceListItems() {
+      const container = document.getElementById('savedFencesListContainer');
+      if (fences.length === 0) {
+        container.innerHTML = `<div class="p-5 text-center text-slate-500">Nenhuma cerca cadastrada.</div>`;
+        return;
+      }
+
+      container.innerHTML = fences.map(f => `
+        <div class="bg-slate-800/80 border border-slate-700/80 rounded-xl p-2.5 flex items-center justify-between gap-2">
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-1.5">
+              <span class="px-2 py-0.5 rounded-full bg-rose-600 text-white text-[10px] font-extrabold">${f.speedLimitKmh} km/h</span>
+              <h5 class="text-xs font-bold text-white truncate">${f.name}</h5>
+            </div>
+          </div>
+          <div class="flex items-center gap-1">
+            <button onclick="focusAndEditFence('${f.id}')" title="Editar" class="w-7 h-7 rounded-lg bg-amber-500/20 text-amber-300 flex items-center justify-center">
+              <i class="fa-solid fa-pen text-[10px]"></i>
+            </button>
+            <button onclick="deleteFenceById('${f.id}')" title="Excluir" class="w-7 h-7 rounded-lg bg-rose-500/15 text-rose-300 flex items-center justify-center">
+              <i class="fa-regular fa-trash-can text-[10px]"></i>
+            </button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function focusAndEditFence(fenceId) {
+      closeFenceListModal();
+      const found = fences.find(f => f.id === fenceId);
+      if (!found) return;
+      const bounds = L.latLngBounds(found.points.map(p => [p.lat, p.lng]));
+      map.fitBounds(bounds, { padding: [60, 60] });
+      setAppMode('fence');
+      startEditingExistingFence(fenceId);
+    }
+
+    function isPointInPolygon(lat, lng, polygonPoints) {
+      let inside = false;
+      for (let i = 0, j = polygonPoints.length - 1; i < polygonPoints.length; j = i++) {
+        const xi = polygonPoints[i].lat, yi = polygonPoints[i].lng;
+        const xj = polygonPoints[j].lat, yj = polygonPoints[j].lng;
+        const intersect = ((yi > lng) !== (yj > lng)) &&
+                          (lat < (xj - xi) * (lng - yi) / ((yj - yi) || 1e-12) + xi);
+        if (intersect) inside = !inside;
+      }
+      return inside;
+    }
+
+    function getActiveFenceForPoint(lat, lng) {
+      let activeFence = null;
+      for (const fence of fences) {
+        if (fence.points && fence.points.length >= 3) {
+          if (isPointInPolygon(lat, lng, fence.points)) {
+            if (!activeFence || fence.speedLimitKmh < activeFence.speedLimitKmh) {
+              activeFence = fence;
+            }
+          }
+        }
+      }
+      return activeFence;
+    }
+
+    // ==========================================
+    // 🚗 NAVEGAÇÃO & SIMULAÇÃO
+    // ==========================================
+    function createVehicle() {
+      if (!vehicleMarker && waypoints.length > 0) {
+        const vehicleHtml = `
+          <div class="relative flex items-center justify-center">
+            <div class="absolute w-10 h-10 rounded-full bg-brand-500/40 sonar-wave"></div>
+            <div class="w-8 h-8 rounded-full bg-brand-600 border-2 border-white shadow-2xl flex items-center justify-center text-white text-xs vehicle-marker-wrapper" id="vehicleIndicator">
+              <i class="fa-solid fa-location-arrow text-xs"></i>
+            </div>
+          </div>
+        `;
+        const icon = L.divIcon({
+          html: vehicleHtml,
+          className: '',
+          iconSize: [32, 32],
+          iconAnchor: [16, 16]
+        });
+        vehicleMarker = L.marker([waypoints[0].lat, waypoints[0].lng], { icon, zIndexOffset: 2000 }).addTo(map);
+      }
+    }
+
+    function removeVehicle() {
+      if (vehicleMarker) {
+        map.removeLayer(vehicleMarker);
+        vehicleMarker = null;
+      }
+    }
+
+    function moveVehicleOnMap(lat, lng, heading = 0) {
+      if (!vehicleMarker) createVehicle();
+      vehicleMarker.setLatLng([lat, lng]);
+
+      const indicator = document.getElementById('vehicleIndicator');
+      if (indicator) {
+        indicator.style.transform = `rotate(${heading - 45}deg)`;
+      }
+
+      if (followVehicle) {
+        map.panTo([lat, lng], { animate: true, duration: 0.25 });
+      }
+    }
+
+    function selectNavMethod(method) {
+      navMethod = method;
+      const btnSim = document.getElementById('btnNavSim');
+      const btnReal = document.getElementById('btnNavReal');
+      const simBar = document.getElementById('simBar');
+      const simSpeed = document.getElementById('simSpeedControls');
+      const realBar = document.getElementById('realGpsBar');
+
+      if (method === 'sim') {
+        btnSim.className = 'px-2.5 py-1 rounded text-xs font-semibold bg-brand-600 text-white transition';
+        btnReal.className = 'px-2.5 py-1 rounded text-xs font-semibold text-slate-400 hover:text-white transition';
+        simBar.classList.remove('hidden');
+        simSpeed.classList.remove('hidden');
+        realBar.classList.add('hidden');
+        stopRealGps();
+      } else {
+        btnReal.className = 'px-2.5 py-1 rounded text-xs font-semibold bg-brand-600 text-white transition';
+        btnSim.className = 'px-2.5 py-1 rounded text-xs font-semibold text-slate-400 hover:text-white transition';
+        simBar.classList.add('hidden');
+        simSpeed.classList.add('hidden');
+        realBar.classList.remove('hidden');
+        stopSim();
+        startRealGps();
+      }
+    }
+
+    function togglePlayPauseSim() {
+      if (simPlaying) {
+        pauseSim();
+      } else {
+        startSim();
+      }
+    }
+
+    function startSim() {
+      if (interpolatedPoints.length === 0) generateInterpolatedRoute();
+      if (simProgress >= 1) {
+        simProgress = 0;
+        simElapsedSeconds = 0;
+        lastSignaledWaypoint = -1;
+      }
+      unlockVoice();
+      simPlaying = true;
+      simLastTimestamp = performance.now();
+      document.getElementById('btnPlayPause').innerHTML = '<i class="fa-solid fa-pause"></i>';
+      simAnimFrame = requestAnimationFrame(simStep);
+    }
+
+    function pauseSim() {
+      simPlaying = false;
+      if (simAnimFrame) cancelAnimationFrame(simAnimFrame);
+      document.getElementById('btnPlayPause').innerHTML = '<i class="fa-solid fa-play"></i>';
+      document.getElementById('navCurrentSpeed').innerText = '0';
+    }
+
+    function stopSim() {
+      pauseSim();
+      simProgress = 0;
+      simElapsedSeconds = 0;
+      lastSignaledWaypoint = -1;
+      lastAlertedFenceId = null;
+      spokenManeuver = -1;
+      if ('speechSynthesis' in window) speechSynthesis.cancel();
+      document.getElementById('simSlider').value = 0;
+      document.getElementById('navFenceAlert').classList.add('hidden');
+      document.getElementById('navElapsedTime').innerText = '00:00';
+      document.getElementById('navRemainingTime').innerText = formatDuration(totalRouteDurationSeconds);
+      progressPolyline.setLatLngs([]);
+    }
+
+    function resetSim() {
+      stopSim();
+      if (interpolatedPoints.length > 0) {
+        const start = interpolatedPoints[0];
+        moveVehicleOnMap(start.lat, start.lng, 0);
+      }
+      startSim();
+    }
+
+    function seekSim(value) {
+      simProgress = value / 1000;
+      simElapsedSeconds = simProgress * totalRouteDurationSeconds;
+      renderSimFrame(0);
+    }
+
+    function changeSimSpeed(speed) {
+      simSpeedMultiplier = speed;
+      document.querySelectorAll('.sim-speed-btn').forEach(btn => {
+        if (parseInt(btn.getAttribute('data-spd')) === speed) {
+          btn.className = 'sim-speed-btn px-2 py-0.5 rounded font-bold bg-brand-600 border border-brand-500 text-white text-[11px]';
+        } else {
+          btn.className = 'sim-speed-btn px-2 py-0.5 rounded font-bold bg-slate-800 border border-slate-700 text-slate-400 text-[11px]';
+        }
+      });
+    }
+
+    function simStep(timestamp) {
+      if (!simPlaying) return;
+      const deltaSec = (timestamp - simLastTimestamp) / 1000;
+      simLastTimestamp = timestamp;
+
+      renderSimFrame(deltaSec);
+
+      if (simProgress < 1) {
+        simAnimFrame = requestAnimationFrame(simStep);
+      } else {
+        pauseSim();
+        playTone('finish');
+        notify('🎉 Chegada ao destino final!', 'success');
+      }
+    }
+
+    function updateFenceHudAlert(activeFence) {
+      const alertBox = document.getElementById('navFenceAlert');
+      const speedEl = document.getElementById('navCurrentSpeed');
+
+      if (activeFence) {
+        alertBox.classList.remove('hidden');
+        document.getElementById('navFenceAlertName').innerText = activeFence.name;
+        document.getElementById('navFenceAlertSpeed').innerText = `MÁX ${activeFence.speedLimitKmh} km/h`;
+        speedEl.className = 'text-lg font-extrabold text-rose-400 font-mono';
+
+        if (lastAlertedFenceId !== activeFence.id) {
+          lastAlertedFenceId = activeFence.id;
+          playTone('fence');
+          notify(`⚠️ Restrição: ${activeFence.name} (${activeFence.speedLimitKmh} km/h)`, 'warning');
+        }
+      } else {
+        alertBox.classList.add('hidden');
+        speedEl.className = 'text-lg font-extrabold text-brand-300 font-mono';
+        lastAlertedFenceId = null;
+      }
+    }
+
+    function renderSimFrame(deltaSec) {
+      if (interpolatedPoints.length < 2) return;
+
+      const currentCovered = simProgress * totalRouteDistanceMeters;
+      let currentIndex = 0;
+      for (let i = 0; i < cumulativeDistances.length - 1; i++) {
+        if (currentCovered >= cumulativeDistances[i] && currentCovered <= cumulativeDistances[i+1]) {
+          currentIndex = i;
+          break;
+        }
+      }
+
+      const currentPoint = interpolatedPoints[currentIndex];
+      const activeFence = getActiveFenceForPoint(currentPoint.lat, currentPoint.lng);
+      updateFenceHudAlert(activeFence);
+
+      const segmentBaseSpeed = currentPoint.speedLimit || 80;
+      const restrictedBaseKmh = activeFence ? Math.min(segmentBaseSpeed, activeFence.speedLimitKmh) : segmentBaseSpeed;
+      const speedKmh = restrictedBaseKmh * simSpeedMultiplier;
+      const speedMetersPerSec = (speedKmh * 1000) / 3600;
+
+      const badgeRoad = document.getElementById('navRoadBadge');
+      if (currentPoint.roadType === 'unpaved') {
+        badgeRoad.innerText = 'TERRA (40 km/h)';
+        badgeRoad.className = 'px-1.5 py-0.5 rounded text-[9px] font-black bg-amber-600/30 border border-amber-500/40 text-amber-300';
+      } else {
+        badgeRoad.innerText = 'ASFALTO (80 km/h)';
+        badgeRoad.className = 'px-1.5 py-0.5 rounded text-[9px] font-black bg-blue-600/30 border border-blue-500/40 text-blue-300';
+      }
+
+      if (deltaSec > 0) {
+        const distDelta = speedMetersPerSec * deltaSec;
+        const progressDelta = distDelta / (totalRouteDistanceMeters || 1);
+        simProgress = Math.min(1, simProgress + progressDelta);
+        simElapsedSeconds = Math.min(totalRouteDurationSeconds, simElapsedSeconds + (deltaSec * simSpeedMultiplier));
+      }
+
+      const next = interpolatedPoints[Math.min(currentIndex + 1, interpolatedPoints.length - 1)];
+      const heading = calculateBearing(currentPoint.lat, currentPoint.lng, next.lat, next.lng);
+
+      moveVehicleOnMap(currentPoint.lat, currentPoint.lng, heading);
+
+      const traveled = interpolatedPoints.slice(0, currentIndex + 1).map(p => [p.lat, p.lng]);
+      progressPolyline.setLatLngs(traveled);
+
+      document.getElementById('simSlider').value = Math.floor(simProgress * 1000);
+      document.getElementById('simCurrentDist').innerText = currentCovered >= 1000 ? `${(currentCovered / 1000).toFixed(2)} km` : `${Math.round(currentCovered)} m`;
+      document.getElementById('navCurrentSpeed').innerText = simPlaying ? Math.round(restrictedBaseKmh) : '0';
+
+      updateTurnHUD(currentPoint, currentCovered);
+    }
+
+    // ==========================================
+    // ✏️ EDIÇÃO DE PONTOS
+    // ==========================================
+    const MAN_LABELS = {
+      none: 'Nenhuma instrução',
+      LL: 'Curva leve à esquerda', L: 'Vire à esquerda', LF: 'Curva fechada à esquerda',
+      RL: 'Curva leve à direita', R: 'Vire à direita', RF: 'Curva fechada à direita',
+      U: 'Faça o retorno',
+      O1: 'Rotatória: 1ª saída', O2: 'Rotatória: 2ª saída', O3: 'Rotatória: 3ª saída', O4: 'Rotatória: 4ª saída'
+    };
+    const MAN_ICONS = {
+      LL: 'fa-solid fa-arrow-up -rotate-45', L: 'fa-solid fa-arrow-left', LF: 'fa-solid fa-arrow-left',
+      RL: 'fa-solid fa-arrow-up rotate-45', R: 'fa-solid fa-arrow-right', RF: 'fa-solid fa-arrow-right',
+      U: 'fa-solid fa-rotate-left',
+      O1: 'fa-solid fa-arrows-spin', O2: 'fa-solid fa-arrows-spin', O3: 'fa-solid fa-arrows-spin', O4: 'fa-solid fa-arrows-spin'
+    };
+
+    function liveUpdateSegments(i) {
+      [i - 1, i].forEach(k => {
+        const a = waypoints[k], b = waypoints[k + 1];
+        if (!a || !b || !segLines[k]) return;
+        segLines[k].setLatLngs([[a.lat, a.lng], [b.lat, b.lng]]);
+      });
+    }
+
+    function insertWaypointAt(index, latlng) {
+      const src = waypoints[index - 1] || {};
+      waypoints.splice(index, 0, { lat: latlng.lat, lng: latlng.lng, speedLimit: src.speedLimit || 80, roadType: src.roadType || 'paved' });
+    }
+
+    function startInsertDrag(handle, i) {
+      insertWaypointAt(i + 1, handle.getLatLng());
+      dragKeep = { marker: handle, index: i + 1 };
+      refreshRouteVisuals();
+    }
+
+    function removeWaypoint(i) {
+      waypoints.splice(i, 1);
+      map.closePopup();
+      refreshRouteVisuals();
+    }
+
+    function setWaypointManeuver(i, value) {
+      if (!waypoints[i]) return;
+      waypoints[i].maneuver = (value === 'none' || !MAN_ICONS[value]) ? undefined : value;
+      map.closePopup();
+      refreshRouteVisuals();
+      notify('Ponto ' + (i + 1) + ': ' + MAN_LABELS[value], 'success');
+    }
+
+    function waypointPopupHtml(i) {
+      const w = waypoints[i];
+      let html = `<b>Ponto ${i + 1}</b> · ${w.speedLimit || 80} km/h`;
+      if (appMode === 'edit') {
+        const cur = (w.maneuver && MAN_ICONS[w.maneuver]) ? w.maneuver : 'none';
+        const opts = Object.keys(MAN_LABELS).map(k => `<option value="${k}"${k === cur ? ' selected' : ''}>${MAN_LABELS[k]}</option>`).join('');
+        html += `<br><span style="font-size:11px">Instrução neste ponto:</span><select onchange="setWaypointManeuver(${i}, this.value)" style="width:100%;margin:4px 0;color:#000">${opts}</select>`;
+        html += `<button onclick="removeWaypoint(${i})" style="width:100%;background:#e11d48;color:#fff;border-radius:6px;padding:4px;font-weight:700">Remover ponto</button>`;
+      }
+      return html;
+    }
+
+    // ==========================================
+    // 🧭 MANOBRAS (CURVAS, RETORNO, ROTATÓRIA)
+    // ==========================================
+    function buildManeuvers() {
+      maneuvers = [];
+      const n = waypoints.length;
+      if (n < 2) return;
+
+      const ANGLES = { LL: -40, L: -90, LF: -140, RL: 40, R: 90, RF: 140 };
+      let dist = 0;
+      for (let i = 0; i < n; i++) {
+        if (i > 0) {
+          const a = waypoints[i - 1], b = waypoints[i];
+          dist += distanceInMeters(a.lat, a.lng, b.lat, b.lng);
+        }
+        const t = waypoints[i].maneuver;
+        if (!t || !MAN_ICONS[t]) continue;
+        if (i === 0 || i === n - 1) continue;
+
+        if (t[0] === 'O') {
+          maneuvers.push({ at: dist, type: 'roundabout', dir: 'right', exit: Number(t[1]), wp: i });
+        } else if (t === 'U') {
+          maneuvers.push({ at: dist, type: 'uturn', dir: 'left', angle: 180, wp: i });
+        } else {
+          maneuvers.push({ at: dist, type: 'turn', dir: t[0] === 'L' ? 'left' : 'right', angle: ANGLES[t], wp: i });
+        }
+      }
+    }
+
+    function maneuverInfo(m) {
+      if (m.type === 'roundabout') return { t: `Na rotatória, pegue a ${m.exit}ª saída`, i: 'fa-solid fa-arrows-spin' };
+      if (m.type === 'uturn') return { t: 'Faça o retorno', i: 'fa-solid fa-rotate-left' };
+      const side = m.dir === 'left' ? 'esquerda' : 'direita';
+      const ang = Math.abs(m.angle || 90);
+      const arrow = m.dir === 'left' ? 'fa-arrow-left' : 'fa-arrow-right';
+      if (ang < 60) return { t: `Curva leve à ${side}`, i: `fa-solid fa-arrow-up ${m.dir === 'left' ? '-rotate-45' : 'rotate-45'}` };
+      if (ang >= 120) return { t: `Curva fechada à ${side}`, i: `fa-solid ${arrow}` };
+      return { t: `Vire à ${side}`, i: `fa-solid ${arrow}` };
+    }
+
+    // ==========================================
+    // 🔊 VOZ DA NAVEGAÇÃO
+    // ==========================================
+    const VOICE_DIST = 50;
+    const VOICE_BTN_ON = 'w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-brand-600 text-white border border-brand-500 shadow-xl flex items-center justify-center active:scale-95 transition';
+    const VOICE_BTN_OFF = 'w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-slate-900/90 text-slate-400 border border-slate-700/80 shadow-xl flex items-center justify-center active:scale-95 transition';
+
+    function initVoiceButton() {
+      const ref = document.getElementById('btnFollowCam');
+      if (!ref) return;
+      const b = document.createElement('button');
+      b.id = 'btnVoice';
+      b.title = 'Voz da navegação';
+      b.className = VOICE_BTN_ON;
+      b.innerHTML = '<i class="fa-solid fa-volume-high"></i>';
+      b.onclick = toggleVoice;
+      ref.insertAdjacentElement('afterend', b);
+    }
+
+    function toggleVoice() {
+      voiceOn = !voiceOn;
+      const b = document.getElementById('btnVoice');
+      b.className = voiceOn ? VOICE_BTN_ON : VOICE_BTN_OFF;
+      b.innerHTML = `<i class="fa-solid ${voiceOn ? 'fa-volume-high' : 'fa-volume-xmark'}"></i>`;
+      if (!voiceOn && 'speechSynthesis' in window) speechSynthesis.cancel();
+      notify(voiceOn ? 'Voz da navegação ativada' : 'Voz da navegação desativada', 'info');
+      if (voiceOn) speak('Voz ativada');
+    }
+
+    function unlockVoice() {
+      if (!voiceOn || !('speechSynthesis' in window)) return;
+      try { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; speechSynthesis.speak(u); } catch (e) {}
+    }
+
+    function speak(text) {
+      if (!voiceOn || !('speechSynthesis' in window)) return;
+      try {
+        const u = new SpeechSynthesisUtterance(text);
+        u.lang = 'pt-BR';
+        u.rate = 1.1;
+        const v = speechSynthesis.getVoices().find(x => x.lang === 'pt-BR');
+        if (v) u.voice = v;
+        if (speechSynthesis.speaking || speechSynthesis.pending) {
+          speechSynthesis.cancel();
+          setTimeout(() => speechSynthesis.speak(u), 80);
+        } else {
+          speechSynthesis.speak(u);
+        }
+      } catch (e) {}
+    }
+
+    function maneuverSpeech(m) {
+      const ORD = ['', 'primeira', 'segunda', 'terceira', 'quarta', 'quinta'];
+      const side = m.dir === 'left' ? 'esquerda' : 'direita';
+      if (m.type === 'roundabout') return `Na rotatória, pegue a ${ORD[m.exit] || m.exit} saída.`;
+      if (m.type === 'uturn') return 'Faça o retorno.';
+      const ang = Math.abs(m.angle || 90);
+      if (ang < 60) return `Faça uma curva leve à ${side}.`;
+      if (ang >= 120) return `Faça uma curva fechada à ${side}.`;
+      return `Vire à ${side}.`;
+    }
+
+    function clearRouteAfterSave(name) {
+      if (appMode !== 'edit') setAppMode('edit');
+      waypoints = [];
+      maneuvers = [];
+      interpolatedPoints = [];
+      cumulativeDistances = [0];
+      loadedRouteId = null;
+      loadedRouteName = null;
+      map.closePopup();
+      refreshRouteVisuals();
+      notify(`Rota "${name}" salva e removida do mapa`, 'success');
+    }
+
+    function updateTurnHUD(currentPoint, coveredDist) {
+      const remainingDist = Math.max(0, totalRouteDistanceMeters - coveredDist);
+
+      if (remainingDist >= 1000) {
+        document.getElementById('navRemainingDistance').innerText = `${(remainingDist / 1000).toFixed(2)} km`;
+      } else {
+        document.getElementById('navRemainingDistance').innerText = `${Math.round(remainingDist)} m`;
+      }
+
+      const remainingSeconds = Math.max(0, totalRouteDurationSeconds - simElapsedSeconds);
+      document.getElementById('navElapsedTime').innerText = formatDuration(simElapsedSeconds);
+      document.getElementById('navRemainingTime').innerText = formatDuration(remainingSeconds);
+
+      const turnIcon = document.getElementById('navTurnIcon');
+      const turnInstruction = document.getElementById('navNextInstruction');
+      const distToNextEl = document.getElementById('navDistanceToNext');
+      const fmt = d => d >= 1000 ? `${(d / 1000).toFixed(1)} km` : `${Math.round(d)} m`;
+
+      if (remainingDist <= 10) {
+        turnInstruction.innerText = 'Chegada ao Destino';
+        distToNextEl.innerText = '0 m';
+        turnIcon.className = 'fa-solid fa-flag-checkered';
+        if (!arrivalSpoken) { arrivalSpoken = true; speak('Você chegou ao seu destino.'); }
+        return;
+      }
+      arrivalSpoken = false;
+
+      const mi = maneuvers.findIndex(m => m.at > coveredDist - 3);
+      if (mi === -1) {
+        turnInstruction.innerText = 'Siga em frente até o destino';
+        distToNextEl.innerText = fmt(remainingDist);
+        turnIcon.className = 'fa-solid fa-arrow-up';
+        return;
+      }
+
+      const nm = maneuvers[mi], dd = Math.max(0, nm.at - coveredDist), info = maneuverInfo(nm);
+      turnInstruction.innerText = info.t;
+      distToNextEl.innerText = fmt(dd);
+      turnIcon.className = info.i;
+      if (dd < 30 && lastSignaledWaypoint !== mi) { lastSignaledWaypoint = mi; playTone('waypoint'); }
+      if (dd <= VOICE_DIST && spokenManeuver !== mi) { spokenManeuver = mi; const frase = maneuverSpeech(nm); speak(`Em ${VOICE_DIST} metros, ${frase.charAt(0).toLowerCase()}${frase.slice(1)}`); }
+    }
+
+    function startRealGps() {
+      if (!navigator.geolocation) {
+        notify('Geolocalização não suportada', 'danger');
+        return;
+      }
+
+      document.getElementById('gpsStatusText').innerText = 'Aguardando satélites...';
+      document.getElementById('gpsLiveDot').className = 'w-2.5 h-2.5 rounded-full bg-amber-400 animate-ping';
+
+      realGpsWatchId = navigator.geolocation.watchPosition(
+        position => {
+          const lat = position.coords.latitude;
+          const lng = position.coords.longitude;
+          const speedKmhNum = position.coords.speed ? Math.round(position.coords.speed * 3.6) : 0;
+          const heading = position.coords.heading || 0;
+          const accuracy = Math.round(position.coords.accuracy);
+
+          document.getElementById('gpsStatusText').innerText = `GPS Conectado (±${accuracy}m)`;
+          document.getElementById('gpsLiveDot').className = 'w-2.5 h-2.5 rounded-full bg-emerald-400';
+          document.getElementById('navCurrentSpeed').innerText = speedKmhNum;
+
+          const activeFence = getActiveFenceForPoint(lat, lng);
+          updateFenceHudAlert(activeFence);
+
+          moveVehicleOnMap(lat, lng, heading);
+
+          let minDistance = Infinity;
+          let closestIndex = 0;
+          for (let i = 0; i < interpolatedPoints.length; i++) {
+            const d = distanceInMeters(lat, lng, interpolatedPoints[i].lat, interpolatedPoints[i].lng);
+            if (d < minDistance) {
+              minDistance = d;
+              closestIndex = i;
+            }
+          }
+
+          if (minDistance > 55) {
+            notify('Atenção: Fora da rota!', 'warning');
+          }
+
+          const covered = cumulativeDistances[closestIndex] || 0;
+          updateTurnHUD({ lat, lng, segmentIndex: interpolatedPoints[closestIndex]?.segmentIndex }, covered);
+
+          const traveled = interpolatedPoints.slice(0, closestIndex + 1).map(p => [p.lat, p.lng]);
+          progressPolyline.setLatLngs(traveled);
+        },
+        err => {
+          document.getElementById('gpsStatusText').innerText = 'Sem sinal GPS';
+          document.getElementById('gpsLiveDot').className = 'w-2.5 h-2.5 rounded-full bg-rose-500';
+          notify('Falha no GPS: ' + err.message, 'danger');
+        },
+        { enableHighAccuracy: true, maximumAge: 1000, timeout: 10000 }
+      );
+    }
+
+    function stopRealGps() {
+      if (realGpsWatchId !== null) {
+        navigator.geolocation.clearWatch(realGpsWatchId);
+        realGpsWatchId = null;
+      }
+    }
+
+    function toggleFollowCamera() {
+      followVehicle = !followVehicle;
+      const btn = document.getElementById('btnFollowCam');
+      if (followVehicle) {
+        btn.className = 'w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-brand-600 text-white border border-brand-500 shadow-xl flex items-center justify-center active:scale-95 transition';
+        notify('Câmera acompanhando veículo', 'info');
+      } else {
+        btn.className = 'w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-slate-900/90 text-slate-400 border border-slate-700/80 shadow-xl flex items-center justify-center active:scale-95 transition';
+        notify('Câmera livre', 'info');
+      }
+    }
+
+    function fitRouteBounds() {
+      const allPts = [
+        ...waypoints.map(p => [p.lat, p.lng]),
+        ...currentFencePoints.map(p => [p.lat, p.lng])
+      ];
+      if (allPts.length > 0) {
+        const bounds = L.latLngBounds(allPts);
+        map.fitBounds(bounds, { padding: [50, 50] });
+      }
+    }
+
+    function mapZoomIn() { map.zoomIn(); }
+    function mapZoomOut() { map.zoomOut(); }
+
+    function toggleLayerMenu() {
+      document.getElementById('layerMenuDropdown').classList.toggle('hidden');
+    }
+
+    document.addEventListener('click', (e) => {
+      const menu = document.getElementById('layerMenuDropdown');
+      const btn = document.getElementById('btnLayerToggle');
+      if (menu && !menu.classList.contains('hidden')) {
+        if (!menu.contains(e.target) && !btn.contains(e.target)) {
+          menu.classList.add('hidden');
+        }
+      }
+    });
+
+    function switchBaseLayer(key) {
+      const layerConfig = BASE_LAYERS[key];
+      if (!layerConfig) return;
+
+      if (currentTileLayer) {
+        map.removeLayer(currentTileLayer);
+      }
+
+      currentTileLayer = L.tileLayer(layerConfig.url, layerConfig.options).addTo(map);
+      currentTileLayer.bringToBack();
+      activeLayerKey = key;
+
+      Object.keys(BASE_LAYERS).forEach(k => {
+        const b = document.getElementById(`layerBtn_${k}`);
+        if (!b) return;
+        if (k === key) {
+          b.className = 'w-full text-left px-2 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 bg-brand-600/30 text-brand-300 border border-brand-500/40';
+        } else {
+          b.className = 'w-full text-left px-2 py-1.5 rounded-lg text-xs font-medium text-slate-300 hover:bg-slate-800 flex items-center gap-1.5';
+        }
+      });
+
+      const menu = document.getElementById('layerMenuDropdown');
+      if (menu) menu.classList.add('hidden');
+    }
+
+    function findMyCurrentLocation() {
+      if (!navigator.geolocation) {
+        notify('GPS indisponível', 'warning');
+        return;
+      }
+      notify('Localizando...', 'info');
+      navigator.geolocation.getCurrentPosition(
+        pos => {
+          const { latitude, longitude } = pos.coords;
+          map.setView([latitude, longitude], 16);
+
+          if (!userCircleMarker) {
+            userCircleMarker = L.circleMarker([latitude, longitude], {
+              radius: 8,
+              fillColor: '#38bdf8',
+              color: '#ffffff',
+              weight: 2,
+              fillOpacity: 1
+            }).addTo(map);
+          } else {
+            userCircleMarker.setLatLng([latitude, longitude]);
+          }
+        },
+        () => notify('Falha no sinal GPS', 'danger'),
+        { enableHighAccuracy: true }
+      );
+    }
+
+    function openSearchModal() {
+      document.getElementById('searchModal').classList.remove('hidden');
+      setTimeout(() => document.getElementById('searchInput').focus(), 100);
+    }
+
+    function closeSearchModal() {
+      document.getElementById('searchModal').classList.add('hidden');
+    }
+
+    async function executeAddressSearch() {
+      const query = document.getElementById('searchInput').value.trim();
+      const resultsDiv = document.getElementById('searchResults');
+      if (!query) return;
+
+      resultsDiv.innerHTML = '<p class="text-slate-400 text-center py-4"><i class="fa-solid fa-spinner fa-spin mr-2"></i>Buscando...</p>';
+
+      try {
+        const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5`);
+        const data = await response.json();
+
+        if (data.length === 0) {
+          resultsDiv.innerHTML = '<p class="text-slate-400 text-center py-4">Nenhum resultado encontrado.</p>';
+          return;
+        }
+
+        resultsDiv.innerHTML = data.map(item => `
+          <div class="p-2 rounded-xl bg-slate-800/80 hover:bg-slate-800 border border-slate-700/60 flex items-center justify-between gap-2 cursor-pointer transition" onclick="selectSearchResult(${item.lat}, ${item.lon}, '${item.display_name.replace(/'/g, "\\'")}')">
+            <div class="min-w-0 flex-1">
+              <p class="font-medium text-white truncate text-xs">${item.display_name.split(',')[0]}</p>
+              <p class="text-[9px] text-slate-400 truncate">${item.display_name}</p>
+            </div>
+            <i class="fa-solid fa-location-dot text-brand-400 shrink-0 text-xs"></i>
+          </div>
+        `).join('');
+      } catch (err) {
+        resultsDiv.innerHTML = '<p class="text-rose-400 text-center py-4">Erro ao buscar local.</p>';
+      }
+    }
+
+    function selectSearchResult(lat, lon, name) {
+      map.setView([lat, lon], 16);
+      closeSearchModal();
+      notify(`Centralizado em: ${name.split(',')[0]}`, 'info');
+    }
+
+    // ==========================================
+    // 💾 BANCO ORACLE: ROTAS (SALVAR / CARREGAR)
+    // ==========================================
+    function updateSaveButtonsLabels() {
+      const isEditing = !!loadedRouteId;
+      const lblMain = document.getElementById('lblBtnSaveMain');
+      const lblSpeed = document.getElementById('lblBtnSaveSpeed');
+      const banner = document.getElementById('activeRouteEditBanner');
+      const bannerName = document.getElementById('activeRouteEditName');
+
+      if (isEditing) {
+        lblMain.innerText = 'Atualizar Rota';
+        lblSpeed.innerText = 'Atualizar Rota';
+        banner.classList.remove('hidden');
+        bannerName.innerText = loadedRouteName || 'Rota Existente';
+      } else {
+        lblMain.innerText = 'Salvar';
+        lblSpeed.innerText = 'Salvar Rota';
+        banner.classList.add('hidden');
+      }
+    }
+
+    function unlinkLoadedRoute() {
+      loadedRouteId = null;
+      loadedRouteName = null;
+      updateSaveButtonsLabels();
+      notify('Rota desvinculada. Agora salvará como uma nova.', 'info');
+    }
+
+    function openSaveModal() {
+      if (waypoints.length < 2) {
+        notify('Crie uma rota com ao menos 2 pontos para salvar', 'warning');
+        return;
+      }
+
+      const input = document.getElementById('routeNameInput');
+      const modalTitle = document.getElementById('saveModalTitle');
+      const alertBox = document.getElementById('loadedRouteAlertBox');
+      const btnSaveAsNew = document.getElementById('btnSaveAsNew');
+      const btnConfirmLabel = document.getElementById('btnConfirmSaveLabel');
+
+      if (loadedRouteId) {
+        modalTitle.innerText = 'Atualizar Rota no Oracle';
+        input.value = loadedRouteName || 'Minha Rota';
+        alertBox.classList.remove('hidden');
+        btnSaveAsNew.classList.remove('hidden');
+        btnConfirmLabel.innerText = 'Sobrescrever Rota';
+      } else {
+        modalTitle.innerText = 'Salvar Rota no Oracle Database';
+        input.value = `Rota ${new Date().toLocaleDateString('pt-BR')} ${new Date().toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})}`;
+        alertBox.classList.add('hidden');
+        btnSaveAsNew.classList.add('hidden');
+        btnConfirmLabel.innerText = 'Gravar no Oracle';
+      }
+
+      document.getElementById('saveModal').classList.remove('hidden');
+    }
+
+    function closeSaveModal() {
+      document.getElementById('saveModal').classList.add('hidden');
+    }
+
+    async function confirmSaveCurrentRoute(forceAsNew = false) {
+      const name = document.getElementById('routeNameInput').value.trim() || 'Minha Rota';
+      const btn = document.getElementById('btnConfirmSave');
+
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Gravando no Oracle...';
+
+      const isUpdate = loadedRouteId && !forceAsNew;
+      const payload = {
+        name: name,
+        distance_meters: totalRouteDistanceMeters,
+        waypoints: waypoints
+      };
+
+      try {
+        if (isUpdate) {
+          const res = await fetch(`${API_BASE_URL}/routes/${loadedRouteId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+          if (!res.ok) throw new Error('Falha ao atualizar registro no Oracle');
+
+          const saved = JSON.parse(localStorage.getItem('geonav_routes') || '[]');
+          const idx = saved.findIndex(r => String(r.id) === String(loadedRouteId));
+          if (idx !== -1) {
+            saved[idx].name = name;
+            saved[idx].waypoints = waypoints;
+            saved[idx].distanceMeters = totalRouteDistanceMeters;
+            localStorage.setItem('geonav_routes', JSON.stringify(saved));
+          }
+
+          loadedRouteName = name;
+          notify(`Rota "${name}" atualizada com sucesso no Oracle!`, 'success');
+        } else {
+          const res = await fetch(`${API_BASE_URL}/routes`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+          if (!res.ok) throw new Error('Falha ao gravar registro no Oracle');
+          const data = await res.json();
+
+          loadedRouteId = String(data.id);
+          loadedRouteName = name;
+
+          const routeData = {
+            id: loadedRouteId,
+            name,
+            waypoints,
+            distanceMeters: totalRouteDistanceMeters,
+            createdAt: new Date().toISOString()
+          };
+          const saved = JSON.parse(localStorage.getItem('geonav_routes') || '[]');
+          saved.unshift(routeData);
+          localStorage.setItem('geonav_routes', JSON.stringify(saved));
+
+          notify(`Nova rota "${name}" gravada com sucesso no Oracle!`, 'success');
+        }
+
+        closeSaveModal();
+        clearRouteAfterSave(name);
+        fetchRoutesFromDatabase();
+      } catch (err) {
+        notify('Erro ao salvar no banco: ' + err.message, 'danger');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-check"></i> <span id="btnConfirmSaveLabel">Salvar</span>';
+      }
+    }
+
+    function toggleRouteManagerModal() {
+      const modal = document.getElementById('routeManagerModal');
+      modal.classList.toggle('hidden');
+      if (!modal.classList.contains('hidden')) {
+        fetchRoutesFromDatabase();
+      }
+    }
+
+    async function fetchRoutesFromDatabase() {
+      const container = document.getElementById('savedRoutesContainer');
+      if (!container) return;
+
+      container.innerHTML = '<div class="p-4 text-center text-slate-400 text-xs"><i class="fa-solid fa-spinner fa-spin mr-2"></i>Consultando rotas no Oracle...</div>';
+
+      try {
+        const res = await fetch(`${API_BASE_URL}/routes`);
+        if (!res.ok) throw new Error('Falha ao comunicar com o servidor');
+        const data = await res.json();
+
+        if (data && data.length > 0) {
+          container.innerHTML = data.map(item => {
+            const distKm = (item.distance_meters / 1000).toFixed(2);
+            const dateStr = item.created_at ? new Date(item.created_at).toLocaleDateString('pt-BR') : '';
+            const isCurrentActive = loadedRouteId && String(loadedRouteId) === String(item.id);
+
+            return `
+              <div class="bg-slate-800/80 border ${isCurrentActive ? 'border-brand-500 bg-brand-950/20' : 'border-slate-700/80'} rounded-xl p-2.5 flex items-center justify-between hover:border-slate-600 transition">
+                <div class="min-w-0 flex-1">
+                  <div class="flex items-center gap-1.5">
+                    <h5 class="text-xs font-bold text-white truncate">${item.name}</h5>
+                    ${isCurrentActive ? '<span class="px-1.5 py-0.2 rounded bg-brand-600 text-white text-[9px] font-bold">ATIVA</span>' : ''}
+                  </div>
+                  <div class="flex items-center gap-1.5 text-[10px] text-slate-400 mt-0.5">
+                    <span><i class="fa-solid fa-route text-brand-400"></i> ${distKm} km</span>
+                    <span>•</span>
+                    <span>${item.waypoints.length} pts</span>
+                    <span>•</span>
+                    <span>${dateStr}</span>
+                  </div>
+                </div>
+                <div class="flex items-center gap-1 ml-1.5">
+                  <button onclick='loadRouteData(${JSON.stringify(item.waypoints)}, "${item.name.replace(/"/g, '&quot;')}", "${item.id}")' title="Carregar para Edição" class="w-7 h-7 rounded-lg bg-emerald-600/20 text-emerald-300 hover:bg-emerald-600 hover:text-white flex items-center justify-center transition">
+                    <i class="fa-solid fa-download text-[10px]"></i>
+                  </button>
+                  <button onclick="deleteRouteFromDatabase('${item.id}')" title="Excluir" class="w-7 h-7 rounded-lg bg-rose-500/10 text-rose-300 hover:bg-rose-500 hover:text-white flex items-center justify-center transition">
+                    <i class="fa-regular fa-trash-can text-[10px]"></i>
+                  </button>
+                </div>
+              </div>
+            `;
+          }).join('');
+        } else {
+          renderLocalFallbackRoutes(container);
+        }
+      } catch (err) {
+        renderLocalFallbackRoutes(container, 'Falha ao buscar no Oracle. Exibindo rotas locais.');
+      }
+    }
+
+    function renderLocalFallbackRoutes(container, warningMessage = '') {
+      const list = JSON.parse(localStorage.getItem('geonav_routes') || '[]');
+      if (list.length === 0) {
+        container.innerHTML = `<div class="p-5 text-center text-slate-500 text-xs">Nenhuma rota salva ainda.</div>`;
+        return;
+      }
+
+      let header = warningMessage ? `<p class="text-[10px] text-amber-400 mb-2">${warningMessage}</p>` : '';
+      container.innerHTML = header + list.map(item => `
+        <div class="bg-slate-800/80 border border-slate-700/80 rounded-xl p-2.5 flex items-center justify-between">
+          <div class="min-w-0 flex-1">
+            <h5 class="text-xs font-bold text-white truncate">${item.name}</h5>
+            <span class="text-[9px] text-slate-400">Salvo localmente</span>
+          </div>
+          <button onclick='loadRouteData(${JSON.stringify(item.waypoints)}, "${item.name.replace(/"/g, '&quot;')}", "${item.id}")' class="w-7 h-7 rounded-lg bg-brand-600 text-white flex items-center justify-center">
+            <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
+          </button>
+        </div>
+      `).join('');
+    }
+
+    async function deleteRouteFromDatabase(id) {
+      if (!confirm('Deseja excluir esta rota permanentemente do Oracle?')) return;
+      try {
+        const res = await fetch(`${API_BASE_URL}/routes/${id}`, { method: 'DELETE' });
+        if (!res.ok) throw new Error('Erro ao excluir no banco');
+        if (loadedRouteId === String(id)) {
+          unlinkLoadedRoute();
+        }
+        notify('Rota excluída do Oracle!', 'info');
+        fetchRoutesFromDatabase();
+      } catch (err) {
+        notify('Erro ao excluir: ' + err.message, 'danger');
+      }
+    }
+
+    function loadRouteData(points, name, routeId = null) {
+      loadedRouteId = routeId ? String(routeId) : null;
+      loadedRouteName = name;
+
+      waypoints = points.map(p => ({
+        lat: p.lat,
+        lng: p.lng,
+        speedLimit: p.speedLimit || 80,
+        roadType: p.roadType || (p.speedLimit && p.speedLimit <= 50 ? 'unpaved' : 'paved'),
+        maneuver: p.maneuver
+      }));
+
+      refreshRouteVisuals();
+      fitRouteBounds();
+      toggleRouteManagerModal();
+      notify(`Rota "${name}" pronta para edição!`, 'success');
+    }
+
+    function exportRouteGPX() {
+      if (waypoints.length === 0) {
+        notify('Nenhuma rota para exportar!', 'warning');
+        return;
+      }
+      let gpx = `<?xml version="1.0" encoding="UTF-8"?>\n`;
+      gpx += `<gpx version="1.1" creator="GeoNav Studio" xmlns="http://www.topografix.com/GPX/1/1">\n`;
+      gpx += `  <trk>\n    <name>${loadedRouteName || 'GeoNav Rota'}</name>\n    <trkseg>\n`;
+      waypoints.forEach(wp => {
+        gpx += `      <trkpt lat="${wp.lat}" lon="${wp.lng}"><desc>Speed:${wp.speedLimit || 80}</desc></trkpt>\n`;
+      });
+      gpx += `    </trkseg>\n  </trk>\n</gpx>`;
+      triggerDownload(gpx, `${loadedRouteName || 'geonav-rota'}.gpx`, 'application/gpx+xml');
+      notify('GPX exportado!', 'success');
+    }
+
+    function exportRouteJSON() {
+      if (waypoints.length === 0 && fences.length === 0) {
+        notify('Nenhum dado para exportar!', 'warning');
+        return;
+      }
+      const data = {
+        id: loadedRouteId,
+        name: loadedRouteName || 'GeoNav Rota & Cercas',
+        distanceMeters: totalRouteDistanceMeters,
+        waypoints,
+        fences
+      };
+      triggerDownload(JSON.stringify(data, null, 2), `${loadedRouteName || 'geonav-rota'}.json`, 'application/json');
+      notify('JSON exportado!', 'success');
+    }
+
+    function triggerDownload(content, filename, type) {
+      const blob = new Blob([content], { type });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+
+    function handleFileUpload(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const text = e.target.result;
+        try {
+          if (file.name.endsWith('.json')) {
+            const data = JSON.parse(text);
+            if (data.id) loadedRouteId = String(data.id);
+            if (data.name) loadedRouteName = data.name;
+
+            if (data.waypoints && Array.isArray(data.waypoints)) {
+              waypoints = data.waypoints;
+            } else if (Array.isArray(data)) {
+              waypoints = data;
+            }
+            if (data.fences && Array.isArray(data.fences)) {
+              fences = data.fences;
+              persistFencesLocally();
+              renderSavedFences();
+            }
+          } else if (file.name.endsWith('.gpx')) {
+            const parser = new DOMParser();
+            const xml = parser.parseFromString(text, 'text/xml');
+            const trkpts = xml.getElementsByTagName('trkpt');
+            const imported = [];
+            for (let i = 0; i < trkpts.length; i++) {
+              const lat = parseFloat(trkpts[i].getAttribute('lat'));
+              const lng = parseFloat(trkpts[i].getAttribute('lon'));
+              if (!isNaN(lat) && !isNaN(lng)) {
+                imported.push({ lat, lng, speedLimit: 80, roadType: 'paved' });
+              }
+            }
+            if (imported.length > 0) waypoints = imported;
+          }
+
+          refreshRouteVisuals();
+          fitRouteBounds();
+          toggleRouteManagerModal();
+          notify(`Arquivo importado com sucesso!`, 'success');
+        } catch (err) {
+          notify('Falha ao processar arquivo.', 'danger');
+        }
+      };
+      reader.readAsText(file);
+      event.target.value = '';
+    }
+
+    let toastTimer = null;
+    function notify(message, type = 'info') {
+      const toast = document.getElementById('toastNotification');
+      const text = document.getElementById('toastMessage');
+      const icon = document.getElementById('toastIcon');
+
+      text.innerText = message;
+
+      if (type === 'success') {
+        icon.className = 'fa-solid fa-circle-check text-emerald-400';
+      } else if (type === 'warning') {
+        icon.className = 'fa-solid fa-triangle-exclamation text-amber-400';
+      } else if (type === 'danger') {
+        icon.className = 'fa-solid fa-circle-xmark text-rose-400';
+      } else {
+        icon.className = 'fa-solid fa-circle-info text-brand-400';
+      }
+
+      toast.classList.remove('opacity-0', 'pointer-events-none', '-translate-y-4');
+      toast.classList.add('opacity-100', 'translate-y-0');
+
+      if (toastTimer) clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => {
+        toast.classList.add('opacity-0', 'pointer-events-none', '-translate-y-4');
+        toast.classList.remove('opacity-100', 'translate-y-0');
+      }, 3000);
+    }
+  </script>
+</body>
+</html>
