@@ -274,7 +274,9 @@
         const isStart = i === 0, isEnd = i === waypoints.length - 1 && waypoints.length > 1;
         const bg = isStart ? 'bg-emerald-500' : (isEnd ? 'bg-rose-500' : 'bg-indigo-600');
         const icon = L.divIcon({ html: `<div class="custom-marker-pin ${bg}" style="width:26px;height:26px;font-size:11px;">${i + 1}</div>`, className: '', iconSize: [26, 26], iconAnchor: [13, 13] });
-        L.marker([pt.lat, pt.lng], { icon, draggable: true }).on('drag', (e) => {
+        
+        // dragend para manter movimento suave e sem travamentos
+        L.marker([pt.lat, pt.lng], { icon, draggable: true }).on('dragend', (e) => {
           pt.lat = e.target.getLatLng().lat;
           pt.lng = e.target.getLatLng().lng;
           refreshRouteVisuals();
@@ -300,15 +302,39 @@
 
     async function confirmSaveRoute() {
       const name = document.getElementById('routeNameInput').value.trim() || 'Nova Rota';
-      await fetch(`${API_BASE_URL}/routes`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ company_id: sessionUser.company_id, name, distance_meters: totalRouteDistanceMeters, waypoints })
-      });
-      closeSaveModal();
-      waypoints = [];
-      refreshRouteVisuals();
-      fetchRoutesFromDatabase();
+      const btn = document.getElementById('saveModal').querySelector('button.bg-emerald-600');
+      btn.disabled = true;
+      btn.innerText = 'A guardar...';
+
+      try {
+        const res = await fetch(`${API_BASE_URL}/routes`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            company_id: sessionUser.company_id, 
+            name, 
+            distance_meters: totalRouteDistanceMeters, 
+            waypoints 
+          })
+        });
+        
+        if (!res.ok) {
+          const err = await res.json();
+          alert('Erro ao gravar: ' + (err.erro || 'Falha na comunicação'));
+          return;
+        }
+
+        closeSaveModal();
+        waypoints = [];
+        refreshRouteVisuals();
+        await fetchRoutesFromDatabase();
+        alert(`Rota "${name}" guardada com sucesso!`);
+      } catch (e) {
+        alert('Erro de conexão ao salvar rota.');
+      } finally {
+        btn.disabled = false;
+        btn.innerText = 'Guardar';
+      }
     }
 
     async function fetchRoutesFromDatabase() {
@@ -323,8 +349,8 @@
               <p class="text-[10px] text-slate-400">${(item.distance_meters / 1000).toFixed(2)} km</p>
             </div>
             <div class="flex gap-1">
-              <button onclick='loadRoute(${JSON.stringify(item.waypoints)})' class="w-7 h-7 bg-indigo-600/30 text-indigo-300 rounded-lg"><i class="fa-solid fa-download text-xs"></i></button>
-              <button onclick="deleteRoute('${item.id}')" class="w-7 h-7 bg-rose-500/20 text-rose-300 rounded-lg"><i class="fa-solid fa-trash text-xs"></i></button>
+              <button onclick='loadRoute(${JSON.stringify(item.waypoints)})' class="w-7 h-7 bg-indigo-600/30 text-indigo-300 rounded-lg flex items-center justify-center"><i class="fa-solid fa-download text-xs"></i></button>
+              <button onclick="deleteRoute('${item.id}')" class="w-7 h-7 bg-rose-500/20 text-rose-300 rounded-lg flex items-center justify-center"><i class="fa-solid fa-trash text-xs"></i></button>
             </div>
           </div>
         `).join('');
