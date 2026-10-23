@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>GeoNav - Navegação Operacional</title>
+  <title>GeoNav - Navegação & Simulação</title>
 
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -14,23 +14,112 @@
 
   <!-- Font Awesome -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+  <!-- Google Font Inter -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://fonts.gstatic.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
+          },
+          colors: {
+            brand: {
+              50: '#eef2ff',
+              100: '#e0e7ff',
+              500: '#6366f1',
+              600: '#4f46e5',
+              700: '#4338ca',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
   <style>
-    * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
-    body { font-family: 'Inter', sans-serif; touch-action: manipulation; user-select: none; }
-    #map-viewport { width: 100%; height: 100%; overflow: hidden; position: relative; background: #020617; }
-    #map { width: 160vmax; height: 160vmax; position: absolute; top: 50%; left: 50%; margin-top: -80vmax; margin-left: -80vmax; z-index: 5; transform-origin: center center; }
+    * {
+      -webkit-tap-highlight-color: transparent;
+      box-sizing: border-box;
+    }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      touch-action: manipulation;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    #map-viewport {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      position: relative;
+      background: #020617;
+    }
+
+    #map {
+      width: 160vmax;
+      height: 160vmax;
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      margin-top: -80vmax;
+      margin-left: -80vmax;
+      z-index: 5;
+      transform-origin: center center;
+      will-change: transform;
+    }
+
     .safe-top-search { top: max(14px, env(safe-area-inset-top)); }
     .safe-bottom-panel { bottom: max(16px, env(safe-area-inset-bottom, 0px)) !important; }
     .safe-top-hud { top: calc(76px + env(safe-area-inset-top, 0px)) !important; }
     .vehicle-marker-wrapper { transform-origin: center center; will-change: transform; }
-    .counter-rot { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; transform: rotate(var(--counter-rot, 0deg)); transform-origin: center center; }
-    .custom-marker-pin { display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 800; border-radius: 9999px; border: 2px solid #fff; box-shadow: 0 4px 10px rgba(0,0,0,0.45); }
+
+    .counter-rot {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transform: rotate(var(--counter-rot, 0deg));
+      transform-origin: center center;
+    }
+    .sig-pin {
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 9999px;
+      border: 3px solid #ffffff;
+      font-weight: 900;
+      font-size: 12px;
+      line-height: 1;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+    }
+    .sig-speed { background: #ffffff; color: #0f172a; border-color: #dc2626; }
+    .sig-curve { background: #f59e0b; color: #0f172a; }
+    .sig-round { background: #0ea5e9; color: #ffffff; }
     .sonar-wave { animation: sonarPulse 2s cubic-bezier(0.2, 0, 0.4, 1) infinite; }
-    @keyframes sonarPulse { 0% { transform: scale(0.8); opacity: 0.9; } 100% { transform: scale(2.6); opacity: 0; } }
+    @keyframes sonarPulse {
+      0% { transform: scale(0.8); opacity: 0.9; }
+      100% { transform: scale(2.6); opacity: 0; }
+    }
+    .custom-marker-pin {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #ffffff;
+      font-weight: 800;
+      border-radius: 9999px;
+      border: 2px solid #ffffff;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.45);
+    }
     .no-scrollbar::-webkit-scrollbar { display: none; }
     .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
   </style>
@@ -43,73 +132,208 @@
       <div id="map"></div>
     </div>
 
-    <!-- CAMPO DE PESQUISA DE ROTAS -->
+    <!-- 🔍 CAMPO DE PESQUISA COM DEBOUNCE FILTRANDO O BANCO -->
     <div id="searchBarWrapper" class="safe-top-search absolute left-3 right-3 sm:left-6 sm:w-96 z-30 transition-all">
-      <div class="relative bg-slate-900/95 backdrop-blur-md rounded-2xl border border-slate-700/80 shadow-2xl flex items-center px-3.5 py-1.5 focus-within:border-indigo-500">
-        <i class="fa-solid fa-route text-indigo-400 text-sm mr-2.5"></i>
-        <input id="searchInput" type="text" placeholder="Procurar rota guardada..." class="w-full bg-transparent text-sm text-white placeholder-slate-400 focus:outline-none py-1.5" onfocus="showAllRoutesList()">
-        <button onclick="logout()" title="Terminar Sessão" class="text-slate-400 hover:text-rose-400 p-1.5 text-xs ml-2">
+      <div class="relative bg-slate-900/95 backdrop-blur-md rounded-2xl border border-slate-700/80 shadow-2xl flex items-center px-3.5 py-1.5 transition-all focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-brand-500/20">
+        <i class="fa-solid fa-route text-brand-400 text-sm mr-2.5"></i>
+        <input 
+          id="searchInput" 
+          type="text" 
+          placeholder="Pesquisar rota no banco..." 
+          class="w-full bg-transparent text-sm text-white placeholder-slate-400 focus:outline-none py-1.5"
+          oninput="handleSearchInput(this.value)"
+          onfocus="showAllRoutesList()"
+        >
+        <button id="clearSearchBtn" onclick="clearSearch()" class="hidden text-slate-400 hover:text-white p-1 text-xs">
+          <i class="fa-solid fa-circle-xmark"></i>
+        </button>
+        <button onclick="logout()" title="Terminar Sessão" class="text-slate-400 hover:text-rose-400 p-1 text-xs ml-2">
           <i class="fa-solid fa-power-off"></i>
         </button>
       </div>
 
+      <!-- Lista Dropdown de Rotas do Banco -->
       <div id="searchResultsCard" class="hidden mt-2 bg-slate-900/95 backdrop-blur-md border border-slate-700/80 rounded-2xl shadow-2xl overflow-hidden max-h-72 overflow-y-auto no-scrollbar">
         <div class="px-3 py-2 border-b border-slate-800 text-[10px] uppercase font-bold text-slate-400 flex items-center justify-between">
-          <span>Rotas Disponíveis na Nuvem</span>
-          <span id="routeCountBadge" class="bg-slate-800 px-1.5 py-0.5 rounded text-indigo-400 font-mono">0</span>
+          <span>Rotas da Empresa</span>
+          <span id="routeCountBadge" class="bg-slate-800 px-1.5 py-0.5 rounded text-brand-400 font-mono">0</span>
         </div>
         <div id="searchResultsList" class="p-1.5 space-y-1 text-xs"></div>
       </div>
     </div>
 
-    <!-- HUD DE ORIENTAÇÃO TURN-BY-TURN -->
-    <div id="navHud" class="safe-top-hud hidden absolute left-3 right-3 md:left-1/2 md:-translate-x-1/2 md:w-[480px] bg-slate-900/95 backdrop-blur-md rounded-2xl border border-slate-700/80 shadow-2xl p-3 z-20">
+    <!-- HUD de Orientação Turn-by-Turn durante Navegação -->
+    <div id="navHud" class="safe-top-hud hidden absolute left-3 right-3 md:left-1/2 md:-translate-x-1/2 md:w-[480px] bg-slate-900/95 backdrop-blur-md rounded-2xl border border-slate-700/80 shadow-2xl p-3 z-20 transition-all duration-300">
       <div class="flex items-center gap-2.5">
-        <div id="navTurnIconBox" class="w-11 h-11 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center text-xl shrink-0">
+        <div id="navTurnIconBox" class="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center text-xl shrink-0 shadow-inner">
           <i id="navTurnIcon" class="fa-solid fa-arrow-up"></i>
         </div>
+
         <div class="flex-1 min-w-0">
-          <p id="navNextInstruction" class="text-[11px] font-semibold text-emerald-400 uppercase tracking-wider truncate">Siga pela rota</p>
+          <p id="navNextInstruction" class="text-[11px] font-semibold text-emerald-400 uppercase tracking-wider truncate">Siga em frente na rota</p>
           <div class="flex items-baseline gap-1">
-            <span id="navDistanceToNext" class="text-2xl font-black text-white">0 m</span>
-            <span class="text-[11px] text-slate-400 font-medium">próx. ponto</span>
+            <span id="navDistanceToNext" class="text-xl sm:text-2xl font-black text-white tracking-tight">0 m</span>
+            <span class="text-[11px] text-slate-400 font-medium">próx. manobra</span>
           </div>
         </div>
-        <div class="text-right shrink-0 bg-slate-800/80 px-2.5 py-1 rounded-xl border border-slate-700/50">
+
+        <div id="navLimitSign" class="hidden flex w-10 h-10 rounded-full bg-white border-[3px] border-red-600 text-slate-900 font-black text-sm items-center justify-center shrink-0 shadow-lg">
+          <span id="navLimitValue">--</span>
+        </div>
+
+        <div id="navSpeedBox" class="text-right shrink-0 bg-slate-800/80 px-2 py-1 rounded-xl border border-slate-700/50 transition-colors">
           <span class="text-[9px] uppercase font-bold text-slate-400 block tracking-widest leading-none mb-0.5">Velocidade</span>
-          <span id="navCurrentSpeed" class="text-xl font-extrabold text-indigo-300 font-mono">0</span>
-          <span class="text-[9px] text-slate-400 font-semibold">km/h</span>
+          <div class="flex items-baseline justify-end gap-0.5">
+            <span id="navCurrentSpeed" class="text-lg font-extrabold text-brand-300 font-mono">0</span>
+            <span class="text-[9px] text-slate-400 font-semibold">km/h</span>
+          </div>
         </div>
       </div>
-      <div class="mt-2.5 pt-2 border-t border-slate-800 flex items-center justify-between text-[11px] text-slate-300 font-medium">
-        <span id="navRemainingDistance"><i class="fa-solid fa-flag-checkered text-indigo-400 mr-1"></i>0.0 km</span>
-        <button onclick="cancelRoute()" class="text-rose-400 hover:text-rose-300 font-bold px-2 py-0.5 rounded bg-rose-500/10">Cancelar</button>
+
+      <!-- Próximo sinal do editor (velocidade / curva / rotatória) -->
+      <div id="navSignalRow" class="hidden flex mt-2.5 items-center gap-2 px-2.5 py-1.5 rounded-xl border bg-slate-800/70 border-slate-700/60">
+        <i id="navSignalIcon" class="fa-solid fa-triangle-exclamation text-amber-400"></i>
+        <span id="navSignalText" class="flex-1 min-w-0 truncate text-[11px] font-bold text-slate-100"></span>
+        <span id="navSignalDist" class="text-[11px] font-black font-mono text-white shrink-0">0 m</span>
+      </div>
+
+      <div class="mt-2.5 pt-2 border-t border-slate-800/90 flex items-center justify-between text-[11px] text-slate-300 font-medium">
+        <div class="flex items-center gap-1">
+          <i class="fa-solid fa-flag-checkered text-brand-400"></i>
+          <span id="navRemainingDistance">0.0 km restante</span>
+        </div>
+        <div class="flex items-center gap-1">
+          <i class="fa-regular fa-clock text-emerald-400"></i>
+          <span id="navRemainingTime">-- min</span>
+        </div>
+        <button onclick="promptCancelRoute()" title="Cancelar Rota" class="text-rose-400 hover:text-rose-300 font-bold flex items-center gap-1 px-2 py-0.5 rounded bg-rose-500/10 hover:bg-rose-500/20 transition">
+          <i class="fa-solid fa-xmark text-[11px]"></i> Cancelar
+        </button>
       </div>
     </div>
 
-    <!-- BOTÕES FLUTUANTES -->
+    <!-- Controles Flutuantes Laterais -->
     <div class="absolute right-3 top-24 flex flex-col gap-1.5 z-20">
-      <button onclick="findMyCurrentLocation()" title="Minha Posição" class="w-10 h-10 rounded-xl bg-slate-900/90 text-indigo-400 border border-slate-700/80 shadow flex items-center justify-center"><i class="fa-solid fa-crosshairs text-xs"></i></button>
-      <button id="btnFollowCam" onclick="toggleFollowCamera()" title="Fixar Câmera" class="w-10 h-10 rounded-xl bg-indigo-600 text-white border border-indigo-500 shadow flex items-center justify-center"><i class="fa-solid fa-location-crosshairs text-xs"></i></button>
-    </div>
+      <button onclick="findMyCurrentLocation()" title="Minha Posição" class="w-10 h-10 rounded-xl bg-slate-900/90 text-slate-200 border border-slate-700/80 shadow-xl flex items-center justify-center hover:bg-slate-800 active:scale-95 transition">
+        <i class="fa-solid fa-crosshairs text-xs text-brand-400"></i>
+      </button>
+      <button id="btnFollowCam" onclick="toggleFollowCamera()" title="Fixar Câmera" class="w-10 h-10 rounded-xl bg-brand-600 text-white border border-brand-500 shadow-xl flex items-center justify-center active:scale-95 transition">
+        <i class="fa-solid fa-location-crosshairs text-xs"></i>
+      </button>
+      <button onclick="fitRouteBounds()" title="Visão Geral da Rota" class="w-10 h-10 rounded-xl bg-slate-900/90 text-slate-200 border border-slate-700/80 shadow-xl flex items-center justify-center hover:bg-slate-800 active:scale-95 transition">
+        <i class="fa-solid fa-expand text-xs"></i>
+      </button>
 
-    <!-- PAINEL INFERIOR: STATUS DE SINAL E TRANSMISSÃO -->
-    <div class="safe-bottom-panel absolute left-3 right-3 md:left-1/2 md:-translate-x-1/2 md:w-[560px] bg-slate-900/95 backdrop-blur-md rounded-2xl border border-slate-800 shadow-2xl p-3 z-20 flex items-center justify-between">
-      <div class="flex items-center gap-2.5 min-w-0">
-        <span id="gpsLiveDot" class="w-3 h-3 rounded-full bg-amber-400 animate-ping shrink-0"></span>
-        <div class="min-w-0">
-          <p id="gpsStatusText" class="text-xs font-semibold text-slate-200 truncate">A procurar satélites GPS...</p>
-          <p id="telemetryStatusText" class="text-[10px] text-emerald-400 truncate"><i class="fa-solid fa-tower-broadcast mr-1"></i>Transmissão ativa</p>
+      <!-- Camadas do Mapa -->
+      <div class="relative">
+        <button id="btnLayerToggle" onclick="toggleLayerMenu()" title="Mudar Mapa" class="w-10 h-10 rounded-xl bg-slate-900/90 text-amber-400 border border-slate-700/80 shadow-xl flex items-center justify-center hover:bg-slate-800 active:scale-95 transition">
+          <i class="fa-solid fa-layer-group text-xs"></i>
+        </button>
+        <div id="layerMenuDropdown" class="hidden absolute right-12 bottom-0 w-40 bg-slate-900/95 backdrop-blur-md border border-slate-700/90 rounded-2xl shadow-2xl p-1.5 flex flex-col gap-1 z-30">
+          <span class="text-[9px] font-bold uppercase tracking-wider text-slate-400 px-2 py-0.5">Camadas</span>
+          <button onclick="switchBaseLayer('streets')" class="w-full text-left px-2 py-1.5 rounded-lg text-xs font-semibold text-slate-200 hover:bg-slate-800">Ruas</button>
+          <button onclick="switchBaseLayer('satellite')" class="w-full text-left px-2 py-1.5 rounded-lg text-xs font-semibold text-slate-200 hover:bg-slate-800">Satélite HD</button>
+          <button onclick="switchBaseLayer('dark')" class="w-full text-left px-2 py-1.5 rounded-lg text-xs font-semibold text-slate-200 hover:bg-slate-800">Noturno</button>
         </div>
       </div>
-      <button id="btnEnableGps" onclick="startRealGps()" class="hidden px-3 py-1.5 rounded-xl bg-amber-500 text-slate-950 text-xs font-extrabold">Ativar GPS</button>
+    </div>
+
+    <!-- PAINEL INFERIOR: STATUS DO GPS REAL & CONTROLES DA SIMULAÇÃO -->
+    <div class="safe-bottom-panel absolute left-3 right-3 md:left-1/2 md:-translate-x-1/2 md:w-[560px] bg-slate-900/95 backdrop-blur-md rounded-2xl border border-slate-800 shadow-2xl p-3 z-20 flex flex-col gap-2.5">
+      
+      <!-- Seletor de Modo: GPS Real vs Simulação -->
+      <div id="modeSelectorRow" class="hidden flex items-center justify-between border-b border-slate-800/80 pb-2">
+        <div class="flex items-center bg-slate-800/80 p-0.5 rounded-xl border border-slate-700/60">
+          <button id="btnModeReal" onclick="switchNavMethod('real')" class="px-3 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1.5 bg-brand-600 text-white">
+            <i class="fa-solid fa-location-arrow text-[10px]"></i> GPS Real
+          </button>
+          <button id="btnModeSim" onclick="switchNavMethod('sim')" class="px-3 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1.5 text-slate-400 hover:text-white">
+            <i class="fa-solid fa-gamepad text-[10px]"></i> Simulação
+          </button>
+        </div>
+
+        <div id="simSpeedControls" class="hidden flex items-center gap-1 text-xs">
+          <span class="text-[10px] text-slate-400 font-semibold mr-1">Velocidade:</span>
+          <button onclick="changeSimSpeed(1)" class="sim-speed-btn px-2 py-0.5 rounded-lg font-bold bg-brand-600 border border-brand-500 text-white text-[11px]" data-spd="1">1x</button>
+          <button onclick="changeSimSpeed(2)" class="sim-speed-btn px-2 py-0.5 rounded-lg font-bold bg-slate-800 border border-slate-700 text-slate-400 text-[11px]" data-spd="2">2x</button>
+          <button onclick="changeSimSpeed(4)" class="sim-speed-btn px-2 py-0.5 rounded-lg font-bold bg-slate-800 border border-slate-700 text-slate-400 text-[11px]" data-spd="4">4x</button>
+        </div>
+      </div>
+
+      <!-- Barra Interativa da Simulação -->
+      <div id="simControlsRow" class="hidden flex items-center justify-between gap-2 border-b border-slate-800/80 pb-2">
+        <div class="flex items-center gap-1.5">
+          <button id="btnPlayPauseSim" onclick="togglePlayPauseSim()" class="w-9 h-9 rounded-xl bg-emerald-500 text-slate-950 flex items-center justify-center font-bold text-sm shadow-md active:scale-95 transition">
+            <i class="fa-solid fa-play"></i>
+          </button>
+          <button onclick="resetSim()" class="w-9 h-9 rounded-xl bg-slate-800 text-slate-300 border border-slate-700 flex items-center justify-center text-sm active:scale-95 transition" title="Reiniciar Simulação">
+            <i class="fa-solid fa-arrow-rotate-left"></i>
+          </button>
+        </div>
+
+        <div class="flex-1 mx-1.5 flex flex-col gap-0.5">
+          <input id="simSlider" type="range" min="0" max="1000" value="0" step="1" oninput="seekSim(this.value)" class="w-full accent-brand-500 bg-slate-800 h-2 rounded-lg cursor-pointer">
+          <div class="flex justify-between text-[10px] text-slate-400 font-mono">
+            <span id="simCurrentDist">0 m</span>
+            <span id="simTotalDist">0.00 km</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Barra Principal de Status e Ações -->
+      <div class="flex items-center justify-between gap-3">
+        <div class="flex items-center gap-2.5 min-w-0">
+          <span id="gpsLiveDot" class="w-3 h-3 rounded-full bg-amber-400 animate-ping shrink-0"></span>
+          <div class="min-w-0">
+            <p id="gpsStatusText" class="text-xs font-semibold text-slate-200 truncate">Buscando sinal GPS...</p>
+            <p id="routeSubStatus" class="text-[10px] text-slate-400 truncate">Selecione uma rota acima para navegar</p>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-1.5 shrink-0">
+          <button id="btnEnableGps" onclick="startRealGps()" class="hidden px-3 py-1.5 rounded-xl bg-amber-500 text-slate-950 text-xs font-extrabold hover:bg-amber-400 transition flex items-center gap-1.5">
+            <i class="fa-solid fa-location-crosshairs text-[10px]"></i> Ativar GPS
+          </button>
+          <button id="cancelNavBtn" onclick="promptCancelRoute()" class="hidden px-3 py-1.5 rounded-xl bg-rose-500/20 text-rose-300 border border-rose-500/30 text-xs font-bold hover:bg-rose-500/30 transition">
+            Cancelar Rota
+          </button>
+          <button id="finishNavBtn" onclick="finishRoute()" class="hidden px-3.5 py-1.5 rounded-xl bg-emerald-600 text-white font-extrabold text-xs hover:bg-emerald-500 transition shadow-lg shadow-emerald-600/30 flex items-center gap-1.5">
+            <i class="fa-solid fa-flag-checkered text-[10px]"></i> Finalizar
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL DE CHEGADA AO DESTINO -->
+    <div id="arrivalModal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+      <div class="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-sm shadow-2xl p-6 text-center flex flex-col items-center gap-4">
+        <div class="w-16 h-16 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center text-3xl animate-bounce">
+          <i class="fa-solid fa-flag-checkered"></i>
+        </div>
+        <div>
+          <h3 class="text-lg font-black text-white">Você Chegou ao Destino!</h3>
+          <p class="text-xs text-slate-400 mt-1">O trajeto planejado foi concluído com sucesso.</p>
+        </div>
+        <div class="w-full pt-2">
+          <button onclick="finishRoute()" class="w-full py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm shadow-lg shadow-emerald-600/30 transition">
+            Finalizar Percurso
+          </button>
+        </div>
+      </div>
     </div>
   </main>
+
+  <div id="toastNotification" class="fixed top-14 left-1/2 -translate-x-1/2 z-50 transition-all duration-300 opacity-0 pointer-events-none transform -translate-y-4">
+    <div class="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-800/95 border border-slate-700 text-xs font-medium text-white shadow-2xl">
+      <i id="toastIcon" class="fa-solid fa-circle-check text-emerald-400"></i>
+      <span id="toastMessage">Alerta</span>
+    </div>
+  </div>
 
   <script>
     const API_BASE_URL = 'https://teste1-p5pw.onrender.com/api';
 
-    // 🔒 CONTROLO DE SESSÃO
+    // 🔒 SESSÃO & SEGURANÇA MULTI-TENANT
     const sessionUser = JSON.parse(localStorage.getItem('geonav_session') || 'null');
     if (!sessionUser) {
       window.location.href = 'login.html';
@@ -120,12 +344,151 @@
       window.location.href = 'login.html';
     }
 
-    let map = null, markersLayer = null, mainPolyline = null, progressPolyline = null, vehicleMarker = null;
-    let userLat = null, userLng = null, currentSpeedKmh = 0, currentBearing = 0;
-    let followVehicle = true, isNavigating = false;
-    let waypoints = [], interpolatedPoints = [], cumulativeDistances = [], totalRouteDistanceMeters = 0;
+    let map = null;
+    let markersLayer = null;
+    let mainPolyline = null;
+    let progressPolyline = null;
+    let vehicleMarker = null;
+
+    let currentTileLayer = null;
+    let activeLayerKey = 'streets';
+
+    let userLat = null;
+    let userLng = null;
+    let currentBearing = 0;
+    let currentMapRotation = 0;
+    let followVehicle = true;
+    let isNavigating = false;
+    let navMethod = 'real';
+
+    let waypoints = [];
+    let interpolatedPoints = [];
+    let cumulativeDistances = [];
+    let totalRouteDistanceMeters = 0;
+    let lastSignaledWaypoint = -1;
+    let announced50mWp = -1;
+
+    let simPlaying = false;
+    let simSpeedMultiplier = 1;
+    let simProgress = 0;
+    let simAnimFrame = null;
+    let simLastTimestamp = null;
+    const SIM_BASE_SPEED_KMH = 45;
+
     let dbRoutes = [];
-    let lastTelemetryTime = 0;
+    let realGpsWatchId = null;
+    let searchDebounceTimer = null;
+    let audioContext = null;
+
+    let rawSignals = [];
+    let signals = [];
+    let activeSpeedLimit = null;
+    let currentSpeedKmh = 0;
+    let lastOverspeedAlert = 0;
+    let lastSignalKey = '';
+    let lastAnnouncedLimit = null;
+    let overspeedActive = false;
+
+    let lastTelemetrySent = 0;
+
+    const cam = {
+      lat: null, lng: null,
+      heading: 0,
+      rot: 0,
+      offY: 0,
+      tLat: null, tLng: null, tHeading: 0, tTime: 0,
+      vLat: 0, vLng: 0,
+      recenter: false,
+      raf: null, last: 0,
+      mapEl: null, indicatorEl: null, lastCr: ''
+    };
+
+    const BASE_LAYERS = {
+      streets: {
+        url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
+        options: { maxZoom: 19, attribution: 'Tiles &copy; Esri' }
+      },
+      satellite: {
+        url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+        options: { maxZoom: 19, attribution: 'Tiles &copy; Esri World Imagery' }
+      },
+      dark: {
+        url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+        options: { maxZoom: 19, subdomains: 'abcd', attribution: '&copy; CARTO' }
+      }
+    };
+
+    function getAudioContext() {
+      if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioContext.state === 'suspended') audioContext.resume();
+      return audioContext;
+    }
+
+    function playTone(type) {
+      try {
+        const ctx = getAudioContext();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        const now = ctx.currentTime;
+
+        if (type === 'start') {
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(440, now);
+          osc.frequency.exponentialRampToValueAtTime(880, now + 0.25);
+          gain.gain.setValueAtTime(0.2, now);
+          gain.gain.exponentialRampToValueAtTime(0.01, now + 0.35);
+          osc.start(now);
+          osc.stop(now + 0.35);
+        } else if (type === 'waypoint' || type === 'alert50m') {
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(700, now);
+          osc.frequency.setValueAtTime(950, now + 0.1);
+          gain.gain.setValueAtTime(0.3, now);
+          gain.gain.exponentialRampToValueAtTime(0.01, now + 0.25);
+          osc.start(now);
+          osc.stop(now + 0.25);
+        } else if (type === 'speed') {
+          osc.type = 'square';
+          osc.frequency.setValueAtTime(900, now);
+          gain.gain.setValueAtTime(0.1, now);
+          gain.gain.setValueAtTime(0.0001, now + 0.12);
+          gain.gain.setValueAtTime(0.1, now + 0.2);
+          gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.34);
+          osc.start(now);
+          osc.stop(now + 0.36);
+        } else if (type === 'overspeed') {
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(520, now);
+          osc.frequency.exponentialRampToValueAtTime(380, now + 0.4);
+          gain.gain.setValueAtTime(0.12, now);
+          gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.45);
+          osc.start(now);
+          osc.stop(now + 0.47);
+        } else if (type === 'finish') {
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(523.25, now);
+          osc.frequency.setValueAtTime(783.99, now + 0.2);
+          gain.gain.setValueAtTime(0.2, now);
+          gain.gain.exponentialRampToValueAtTime(0.01, now + 0.6);
+          osc.start(now);
+          osc.stop(now + 0.6);
+        }
+      } catch (e) {}
+    }
+
+    function speakInstruction(text, queue = false) {
+      if (!('speechSynthesis' in window)) return;
+      try {
+        if (!queue) window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = 'pt-BR';
+        utterance.rate = 1.05;
+        utterance.pitch = 1.0;
+        window.speechSynthesis.speak(utterance);
+      } catch (e) {}
+    }
 
     window.addEventListener('load', () => {
       initMap();
@@ -134,68 +497,909 @@
     });
 
     function initMap() {
-      map = L.map('map', { zoomControl: false, attributionControl: false }).setView([-23.5505, -46.6333], 15);
-      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19 }).addTo(map);
+      const defaultCenter = [-23.5505, -46.6333];
+      map = L.map('map', { zoomControl: false, attributionControl: false, tap: false }).setView(defaultCenter, 15);
+      switchBaseLayer('streets');
 
       markersLayer = L.layerGroup().addTo(map);
-      mainPolyline = L.polyline([], { color: '#6366f1', weight: 7, opacity: 0.9 }).addTo(map);
-      progressPolyline = L.polyline([], { color: '#10b981', weight: 8, opacity: 0.95 }).addTo(map);
+      mainPolyline = L.polyline([], { color: '#6366f1', weight: 7, opacity: 0.9, lineCap: 'round', lineJoin: 'round' }).addTo(map);
+      progressPolyline = L.polyline([], { color: '#10b981', weight: 8, opacity: 0.95, lineCap: 'round', lineJoin: 'round' }).addTo(map);
+
+      setTimeout(() => map.invalidateSize(), 200);
+      map.on('dragstart', () => { if (followVehicle) setFollow(false); });
     }
 
+    function updateMapRotation(bearing) {
+      if (bearing === null || bearing === undefined || isNaN(bearing)) return;
+      currentBearing = bearing;
+      cam.tHeading = normAngle(bearing);
+    }
+
+    // BUSCA AS ROTAS ISOLADAS DA EMPRESA
     async function fetchDatabaseRoutes() {
       try {
-        const res = await fetch(`${API_BASE_URL}/routes`);
-        if (res.ok) {
-          dbRoutes = await res.json();
-          document.getElementById('routeCountBadge').innerText = dbRoutes.length;
-          renderRouteList(dbRoutes);
-        }
-      } catch (e) {}
+        const res = await fetch(`${API_BASE_URL}/routes?company_id=${sessionUser.company_id}`);
+        if (!res.ok) throw new Error();
+        dbRoutes = await res.json();
+        updateRouteBadge(dbRoutes.length);
+      } catch (err) {
+        dbRoutes = JSON.parse(localStorage.getItem('geonav_routes') || '[]');
+        updateRouteBadge(dbRoutes.length);
+      }
     }
 
-    function showAllRoutesList() { document.getElementById('searchResultsCard').classList.remove('hidden'); }
+    function updateRouteBadge(total) {
+      const badge = document.getElementById('routeCountBadge');
+      if (badge) badge.innerText = total;
+    }
+
+    function handleSearchInput(val) {
+      const clearBtn = document.getElementById('clearSearchBtn');
+      if (val.trim().length > 0) clearBtn.classList.remove('hidden');
+      else { clearBtn.classList.add('hidden'); renderRouteList(dbRoutes); return; }
+      clearTimeout(searchDebounceTimer);
+      searchDebounceTimer = setTimeout(() => filterRoutes(val.trim()), 250);
+    }
+
+    function showAllRoutesList() {
+      const resultsCard = document.getElementById('searchResultsCard');
+      const searchInput = document.getElementById('searchInput');
+      resultsCard.classList.remove('hidden');
+      if (searchInput.value.trim().length > 0) filterRoutes(searchInput.value.trim());
+      else renderRouteList(dbRoutes);
+    }
+
+    function filterRoutes(query) {
+      const q = query.toLowerCase();
+      renderRouteList(dbRoutes.filter(item => item.name.toLowerCase().includes(q)));
+    }
 
     function renderRouteList(list) {
-      const c = document.getElementById('searchResultsList');
-      if (!list.length) { c.innerHTML = '<div class="p-4 text-center text-slate-400">Nenhuma rota encontrada.</div>'; return; }
-      c.innerHTML = list.map((item, idx) => `
-        <div class="p-2.5 rounded-xl hover:bg-slate-800 flex items-center justify-between gap-2.5 cursor-pointer border border-transparent hover:border-slate-700 transition" onclick="selectRoute(${idx})">
-          <div class="min-w-0 flex-1">
-            <p class="font-bold text-white text-xs truncate">${item.name}</p>
-            <p class="text-[10px] text-slate-400">${(item.distance_meters / 1000).toFixed(2)} km • ${item.waypoints.length} pts</p>
+      const resultsCard = document.getElementById('searchResultsCard');
+      const resultsList = document.getElementById('searchResultsList');
+      resultsCard.classList.remove('hidden');
+
+      if (!list || list.length === 0) {
+        resultsList.innerHTML = '<div class="p-4 text-center text-slate-400">Nenhuma rota encontrada para esta empresa.</div>';
+        return;
+      }
+
+      resultsList.innerHTML = list.map(item => {
+        const distKm = (item.distance_meters / 1000).toFixed(2);
+        const ptsCount = toArray(item.waypoints).length;
+        const sigCount = buildRouteData(item).sigList.length;
+
+        return `
+          <div class="p-2.5 rounded-xl hover:bg-slate-800 border border-transparent hover:border-slate-700 flex items-center justify-between gap-2.5 cursor-pointer transition" onclick="selectRouteByIndex(${dbRoutes.indexOf(item)})">
+            <div class="w-8 h-8 rounded-xl bg-brand-600/20 text-brand-400 flex items-center justify-center shrink-0">
+              <i class="fa-solid fa-location-arrow text-xs"></i>
+            </div>
+            <div class="min-w-0 flex-1">
+              <p class="font-bold text-white truncate text-xs">${item.name}</p>
+              <div class="flex items-center gap-1.5 text-[10px] text-slate-400 mt-0.5">
+                <span>${distKm} km</span>
+                <span>•</span>
+                <span>${ptsCount} pts</span>${sigCount ? `<span>•</span><span class="text-amber-400">${sigCount} manobras</span>` : ''}
+              </div>
+            </div>
+            <span class="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold shadow flex items-center gap-1">
+              <i class="fa-solid fa-play text-[9px]"></i> Navegar
+            </span>
           </div>
-          <span class="px-2.5 py-1 rounded-lg bg-emerald-600 text-white text-[11px] font-bold">Navegar</span>
-        </div>
-      `).join('');
+        `;
+      }).join('');
     }
 
-    function selectRoute(idx) {
-      const item = dbRoutes[idx];
-      waypoints = item.waypoints;
-      document.getElementById('searchResultsCard').classList.add('hidden');
-      document.getElementById('searchInput').value = item.name;
-      document.getElementById('navHud').classList.remove('hidden');
+    function clearSearch() {
+      document.getElementById('searchInput').value = '';
+      document.getElementById('clearSearchBtn').classList.add('hidden');
+      renderRouteList(dbRoutes);
+    }
 
+    function toArray(v) {
+      if (Array.isArray(v)) return v;
+      if (typeof v === 'string') {
+        try { const j = JSON.parse(v); return Array.isArray(j) ? j : []; } catch (e) { return []; }
+      }
+      return [];
+    }
+
+    function signedTurn(b1, b2) { return ((b2 - b1 + 540) % 360) - 180; }
+
+    function buildManeuvers(wps) {
+      const n = wps.length;
+      if (n < 2) return [];
+
+      const sd = [0], brg = [], turn = [0];
+      for (let i = 1; i < n; i++) {
+        const a = wps[i - 1], b = wps[i];
+        sd[i] = sd[i - 1] + distanceInMeters(a.lat, a.lng, b.lat, b.lng);
+        brg[i - 1] = calculateBearing(a.lat, a.lng, b.lat, b.lng);
+      }
+      for (let i = 1; i < n - 1; i++) turn[i] = signedTurn(brg[i - 1], brg[i]);
+
+      const runs = [];
+      let run = null;
+      for (let i = 1; i < n - 1; i++) {
+        const t = turn[i];
+        if (Math.abs(t) < 3) {
+          if (run && sd[i] - run.lastS > 30) { runs.push(run); run = null; }
+          continue;
+        }
+        if (run && (sd[i] - run.lastS > 30 || run.len > 250 || (Math.sign(t) !== run.sign && Math.abs(t) >= 8))) { runs.push(run); run = null; }
+        if (!run) run = { a: i, b: i, sum: 0, sign: Math.sign(t), firstS: sd[i], lastS: sd[i], len: 0 };
+        run.sum += t; run.b = i; run.lastS = sd[i]; run.len = sd[i] - run.firstS;
+      }
+      if (run) runs.push(run);
+
+      const skip = new Set(), found = [];
+      runs.forEach((r, k) => {
+        const A = r.sum, ab = Math.abs(A);
+        if (skip.has(k) || ab < 30 || ab / Math.max(r.len, 15) < 0.3) return;
+        const m = { run: k, at: (sd[r.a] + sd[r.b]) / 2, angle: A, dir: A > 0 ? 'right' : 'left', type: ab >= 165 ? 'uturn' : 'turn' };
+        const p = runs[k - 1], q = runs[k + 1];
+        const pIn = p && p.sum > 0 && r.firstS - p.lastS <= 30;
+        const qIn = q && q.sum > 0 && q.firstS - r.lastS <= 30;
+        if (A < 0 && ab >= 90 && r.len / (ab * Math.PI / 180) <= 50 && (pIn || qIn)) {
+          const net = A + (pIn ? p.sum : 0) + (qIn ? q.sum : 0);
+          if (pIn) skip.add(k - 1);
+          if (qIn) skip.add(k + 1);
+          m.type = 'roundabout';
+          m.exit = Math.min(5, Math.max(1, Math.round((180 - net) / 90)));
+          m.at = pIn ? p.firstS : r.firstS;
+        }
+        found.push(m);
+      });
+      let res = found.filter(m => !skip.has(m.run));
+
+      wps.forEach((w, i) => {
+        const t = w.maneuver;
+        if (!t || t === 'auto') return;
+        res = res.filter(m => Math.abs(m.at - sd[i]) > 35);
+        if (t === 'X') return;
+        res.push({
+          at: sd[i], run: -1,
+          type: t[0] === 'O' ? 'roundabout' : (t === 'U' ? 'uturn' : 'turn'),
+          dir: t === 'L' ? 'left' : 'right',
+          angle: t === 'L' ? -90 : 90,
+          exit: t[0] === 'O' ? Number(t[1]) : 0
+        });
+      });
+
+      return res.sort((x, y) => x.at - y.at);
+    }
+
+    function buildRouteData(item) {
+      const path = [];
+      toArray(item.waypoints).forEach(p => {
+        const lat = parseFloat(p.lat ?? p.latitude);
+        const lng = parseFloat(p.lng ?? p.lon ?? p.longitude);
+        if (!isFinite(lat) || !isFinite(lng)) return;
+        const sl = parseFloat(p.speedLimit ?? p.speed_limit);
+        path.push({
+          lat, lng,
+          speedLimit: sl > 0 ? sl : null,
+          roadType: p.roadType || 'paved',
+          maneuver: p.maneuver
+        });
+      });
+      return { path, sigList: buildManeuvers(path) };
+    }
+
+    function selectRouteByIndex(i) {
+      const item = dbRoutes[i];
+      if (item) selectRouteFromDatabase(item);
+    }
+
+    function selectRouteFromDatabase(item) {
+      const name = item.name || 'Rota';
+      const built = buildRouteData(item);
+
+      if (built.path.length < 2) {
+        notify('Esta rota não tem pontos suficientes.', 'danger');
+        return;
+      }
+
+      document.getElementById('searchResultsCard').classList.add('hidden');
+      document.getElementById('searchInput').value = name;
+      document.getElementById('clearSearchBtn').classList.remove('hidden');
+
+      if (!gpsHasFix) startRealGps();
+
+      waypoints = built.path;
+      rawSignals = built.sigList;
+      setFollow(true, true);
+      loadRouteVisuals();
+
+      isNavigating = true;
+      lastSignaledWaypoint = -1;
+      announced50mWp = -1;
+
+      if (waypoints.length >= 2) {
+        currentBearing = calculateBearing(waypoints[0].lat, waypoints[0].lng, waypoints[1].lat, waypoints[1].lng);
+      }
+
+      document.getElementById('modeSelectorRow').classList.remove('hidden');
+      document.getElementById('navHud').classList.remove('hidden');
+      document.getElementById('cancelNavBtn').classList.remove('hidden');
+      document.getElementById('finishNavBtn').classList.add('hidden');
+      document.getElementById('routeSubStatus').innerText = `Navegando: ${name}`;
+
+      switchNavMethod('real');
+
+      const initialLat = (userLat && userLng) ? userLat : waypoints[0].lat;
+      const initialLng = (userLat && userLng) ? userLng : waypoints[0].lng;
+
+      map.setView([initialLat, initialLng], 18, { animate: false });
+      updateMapRotation(currentBearing);
+      setCameraTarget(initialLat, initialLng, currentBearing, true);
+
+      playTone('start');
+      speakInstruction('Iniciando rota. Siga em frente pelo trajeto.');
+      notify(`Rota selecionada! GPS em andamento.`, 'success');
+    }
+
+    function loadRouteVisuals() {
       markersLayer.clearLayers();
-      const coords = waypoints.map(p => [p.lat, p.lng]);
+      const coords = waypoints.map(pt => [pt.lat, pt.lng]);
       mainPolyline.setLatLngs(coords);
       progressPolyline.setLatLngs([]);
 
+      waypoints.forEach((pt, index) => {
+        const isStart = index === 0;
+        const isEnd = index === waypoints.length - 1 && waypoints.length > 1;
+
+        if (isStart || isEnd) {
+          const bg = isStart ? 'bg-emerald-500' : 'bg-rose-500';
+          const label = isStart ? '<i class="fa-solid fa-play text-[9px]"></i>' : '<i class="fa-solid fa-flag-checkered text-[10px]"></i>';
+          const size = 28;
+
+          const iconHtml = `<div class="counter-rot"><div class="custom-marker-pin ${bg}" style="width: ${size}px; height: ${size}px; font-size: 11px;">${label}</div></div>`;
+          const icon = L.divIcon({ html: iconHtml, className: '', iconSize: [size, size], iconAnchor: [size / 2, size / 2] });
+          L.marker([pt.lat, pt.lng], { icon }).addTo(markersLayer);
+        }
+      });
+
+      let totalM = 0;
+      for (let i = 0; i < waypoints.length - 1; i++) {
+        totalM += distanceInMeters(waypoints[i].lat, waypoints[i].lng, waypoints[i+1].lat, waypoints[i+1].lng);
+      }
+      totalRouteDistanceMeters = totalM;
+
+      const totalDistStr = totalM >= 1000 ? `${(totalM / 1000).toFixed(2)} km` : `${Math.round(totalM)} m`;
+      document.getElementById('simTotalDist').innerText = totalDistStr;
+
       generateInterpolatedRoute();
-      isNavigating = true;
-      map.fitBounds(L.latLngBounds(coords), { padding: [80, 80] });
+      computeSignals();
+      renderSignalMarkers();
+    }
+
+    function switchNavMethod(method) {
+      navMethod = method;
+      const btnReal = document.getElementById('btnModeReal');
+      const btnSim = document.getElementById('btnModeSim');
+      const simControls = document.getElementById('simControlsRow');
+      const simSpeed = document.getElementById('simSpeedControls');
+
+      if (method === 'sim') {
+        btnSim.className = 'px-3 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1.5 bg-brand-600 text-white shadow';
+        btnReal.className = 'px-3 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1.5 text-slate-400 hover:text-white';
+        simControls.classList.remove('hidden');
+        simSpeed.classList.remove('hidden');
+        document.getElementById('gpsStatusText').innerText = 'Modo Simulação Ativo';
+        document.getElementById('gpsLiveDot').className = 'w-3 h-3 rounded-full bg-cyan-400';
+        resetSim();
+        notify('Simulação pronta. Pressione Play!', 'info');
+      } else {
+        btnReal.className = 'px-3 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1.5 bg-brand-600 text-white shadow';
+        btnSim.className = 'px-3 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1.5 text-slate-400 hover:text-white';
+        simControls.classList.add('hidden');
+        simSpeed.classList.add('hidden');
+        pauseSim();
+        document.getElementById('gpsStatusText').innerText = 'GPS Conectado';
+        document.getElementById('gpsLiveDot').className = 'w-3 h-3 rounded-full bg-emerald-400';
+        notify('Retornando ao GPS Real', 'info');
+      }
+    }
+
+    function togglePlayPauseSim() { if (simPlaying) pauseSim(); else startSim(); }
+
+    function startSim() {
+      if (interpolatedPoints.length === 0) generateInterpolatedRoute();
+      if (simProgress >= 1) { simProgress = 0; lastSignaledWaypoint = -1; announced50mWp = -1; }
+      simPlaying = true;
+      simLastTimestamp = performance.now();
+      document.getElementById('btnPlayPauseSim').innerHTML = '<i class="fa-solid fa-pause"></i>';
+      playTone('start');
+      simAnimFrame = requestAnimationFrame(simStep);
+    }
+
+    function pauseSim() {
+      simPlaying = false;
+      if (simAnimFrame) cancelAnimationFrame(simAnimFrame);
+      document.getElementById('btnPlayPauseSim').innerHTML = '<i class="fa-solid fa-play"></i>';
+      document.getElementById('navCurrentSpeed').innerText = '0';
+      currentSpeedKmh = 0;
+    }
+
+    function resetSim() {
+      pauseSim();
+      simProgress = 0;
+      lastSignaledWaypoint = -1;
+      announced50mWp = -1;
+      document.getElementById('simSlider').value = 0;
+      progressPolyline.setLatLngs([]);
+      if (interpolatedPoints.length > 0) {
+        const start = interpolatedPoints[0];
+        const next = interpolatedPoints[Math.min(1, interpolatedPoints.length - 1)];
+        const b = calculateBearing(start.lat, start.lng, next.lat, next.lng);
+        updateMapRotation(b);
+        updateVehicle(start.lat, start.lng, b, true);
+      }
+    }
+
+    function seekSim(val) { simProgress = val / 1000; renderSimFrame(0); }
+
+    function changeSimSpeed(multiplier) {
+      simSpeedMultiplier = multiplier;
+      document.querySelectorAll('.sim-speed-btn').forEach(btn => {
+        if (parseInt(btn.getAttribute('data-spd')) === multiplier) {
+          btn.className = 'sim-speed-btn px-2 py-0.5 rounded-lg font-bold bg-brand-600 border border-brand-500 text-white text-[11px]';
+        } else {
+          btn.className = 'sim-speed-btn px-2 py-0.5 rounded-lg font-bold bg-slate-800 border border-slate-700 text-slate-400 text-[11px]';
+        }
+      });
+    }
+
+    function simStep(timestamp) {
+      if (!simPlaying) return;
+      const deltaSec = (timestamp - simLastTimestamp) / 1000;
+      simLastTimestamp = timestamp;
+      renderSimFrame(deltaSec);
+
+      if (simProgress < 1) {
+        simAnimFrame = requestAnimationFrame(simStep);
+      } else {
+        pauseSim();
+        playTone('finish');
+        speakInstruction('Você chegou ao seu destino final.');
+        document.getElementById('finishNavBtn').classList.remove('hidden');
+        document.getElementById('arrivalModal').classList.remove('hidden');
+      }
+    }
+
+    function renderSimFrame(deltaSec) {
+      if (interpolatedPoints.length < 2) return;
+      const speedKmh = (activeSpeedLimit || SIM_BASE_SPEED_KMH) * simSpeedMultiplier;
+      const speedMetersPerSec = (speedKmh * 1000) / 3600;
+
+      if (deltaSec > 0) {
+        const distDelta = speedMetersPerSec * deltaSec;
+        const progressDelta = distDelta / (totalRouteDistanceMeters || 1);
+        simProgress = Math.min(1, simProgress + progressDelta);
+      }
+
+      const coveredDistance = Math.min(simProgress * totalRouteDistanceMeters, cumulativeDistances[cumulativeDistances.length - 1]);
+      const currentIndex = indexAtDistance(coveredDistance);
+      const pos = pointAtDistance(coveredDistance);
+      const heading = routeBearingAt(coveredDistance, 25);
+
+      updateMapRotation(heading);
+      updateVehicle(pos.lat, pos.lng, heading, deltaSec === 0);
+
+      const traveled = interpolatedPoints.slice(0, currentIndex + 1).map(p => [p.lat, p.lng]);
+      traveled.push([pos.lat, pos.lng]);
+      progressPolyline.setLatLngs(traveled);
+
+      document.getElementById('simSlider').value = Math.floor(simProgress * 1000);
+      document.getElementById('simCurrentDist').innerText = coveredDistance >= 1000 ? `${(coveredDistance / 1000).toFixed(2)} km` : `${Math.round(coveredDistance)} m`;
+      document.getElementById('navCurrentSpeed').innerText = simPlaying ? Math.round(speedKmh) : '0';
+      currentSpeedKmh = simPlaying ? speedKmh : 0;
+
+      processNavigationHUD(pos.lat, pos.lng, currentIndex, coveredDistance);
+    }
+
+    function promptCancelRoute() { if (confirm('Deseja cancelar a navegação?')) cancelRoute(); }
+
+    function cancelRoute() {
+      isNavigating = false;
+      pauseSim();
+      waypoints = [];
+      interpolatedPoints = [];
+      cumulativeDistances = [];
+      totalRouteDistanceMeters = 0;
+      currentBearing = 0;
+      announced50mWp = -1;
+      rawSignals = [];
+      signals = [];
+      activeSpeedLimit = null;
+      lastSignalKey = '';
+      lastAnnouncedLimit = null;
+      currentSpeedKmh = 0;
+
+      mainPolyline.setLatLngs([]);
+      progressPolyline.setLatLngs([]);
+      markersLayer.clearLayers();
+      updateMapRotation(0);
+
+      document.getElementById('modeSelectorRow').classList.add('hidden');
+      document.getElementById('simControlsRow').classList.add('hidden');
+      document.getElementById('simSpeedControls').classList.add('hidden');
+      document.getElementById('navHud').classList.add('hidden');
+      document.getElementById('navSignalRow').classList.add('hidden');
+      document.getElementById('navLimitSign').classList.add('hidden');
+      document.getElementById('cancelNavBtn').classList.add('hidden');
+      document.getElementById('finishNavBtn').classList.add('hidden');
+      document.getElementById('arrivalModal').classList.add('hidden');
+      document.getElementById('searchInput').value = '';
+      document.getElementById('clearSearchBtn').classList.add('hidden');
+      document.getElementById('searchResultsCard').classList.add('hidden');
+      document.getElementById('routeSubStatus').innerText = 'Selecione uma rota acima para navegar';
+
+      if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+      if (userLat && userLng) {
+        map.setView([userLat, userLng], 16, { animate: false });
+        setCameraTarget(userLat, userLng, null, true);
+      }
+      notify('Rota cancelada.', 'info');
+    }
+
+    function finishRoute() {
+      document.getElementById('arrivalModal').classList.add('hidden');
+      cancelRoute();
+      notify('Percurso finalizado com sucesso!', 'success');
+    }
+
+    let gpsHasFix = false;
+    let lastGpsErrorCode = null;
+
+    function setGpsStatus(text, dotClass) {
+      if (navMethod !== 'real') return;
+      document.getElementById('gpsStatusText').innerText = text;
+      document.getElementById('gpsLiveDot').className = 'w-3 h-3 rounded-full shrink-0 ' + dotClass;
+    }
+
+    function showGpsButton(show) {
+      const b = document.getElementById('btnEnableGps');
+      if (b) b.classList.toggle('hidden', !show);
+    }
+
+    function onGpsPosition(position) {
+      gpsHasFix = true;
+      lastGpsErrorCode = null;
+      showGpsButton(false);
+
+      userLat = position.coords.latitude;
+      userLng = position.coords.longitude;
+      const speedKmh = position.coords.speed ? Math.round(position.coords.speed * 3.6) : 0;
+      const deviceHeading = (typeof position.coords.heading === 'number' && !isNaN(position.coords.heading) && (position.coords.speed || 0) > 1.5)
+        ? position.coords.heading : null;
+      const accuracy = Math.round(position.coords.accuracy);
+
+      // Transmite telemetria ao painel do Editor a cada 5 segundos
+      sendTelemetry(userLat, userLng, deviceHeading || 0, speedKmh);
+
+      if (navMethod === 'real') {
+        setGpsStatus(`GPS Conectado (±${accuracy}m)`, 'bg-emerald-400');
+        document.getElementById('navCurrentSpeed').innerText = speedKmh;
+        currentSpeedKmh = speedKmh;
+
+        if (interpolatedPoints.length > 1 && isNavigating) {
+          trackUserOnRoute(userLat, userLng, deviceHeading);
+        } else {
+          updateVehicle(userLat, userLng, deviceHeading);
+        }
+      }
+    }
+
+    // 📡 TRANSMISSÃO PARA A TABELA user_locations NO BANCO NEON
+    function sendTelemetry(lat, lng, heading, speed) {
+      const now = Date.now();
+      if (now - lastTelemetrySent < 5000 || !sessionUser) return;
+      lastTelemetrySent = now;
+
+      fetch(`${API_BASE_URL}/telemetry`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: sessionUser.id,
+          company_id: sessionUser.company_id,
+          username: sessionUser.username,
+          name: sessionUser.name,
+          role: sessionUser.role,
+          latitude: lat,
+          longitude: lng,
+          heading: heading,
+          speed_kmh: speed
+        })
+      }).catch(() => {});
+    }
+
+    function onGpsError(err) {
+      const code = err && err.code;
+      let msg = 'Sem sinal GPS';
+      let toast = null;
+
+      if (code === 1) {
+        msg = 'GPS bloqueado — permita a localização';
+        toast = location.protocol === 'file:' ? 'Abra através da página segura HTTPS.' : 'Libere a localização no navegador.';
+      } else if (code === 2) {
+        msg = 'Sinal de GPS indisponível';
+      } else if (code === 3) {
+        msg = 'GPS a demorar...';
+      }
+
+      setGpsStatus(msg, 'bg-rose-500');
+      showGpsButton(code === 1 || code === 2);
+      if (toast && lastGpsErrorCode !== code) notify(toast, 'danger');
+      lastGpsErrorCode = code;
+    }
+
+    function startRealGps() {
+      if (!navigator.geolocation) {
+        setGpsStatus('GPS não suportado', 'bg-rose-500');
+        return;
+      }
+      if (realGpsWatchId !== null) {
+        navigator.geolocation.clearWatch(realGpsWatchId);
+        realGpsWatchId = null;
+      }
+
+      gpsHasFix = false;
+      showGpsButton(false);
+      setGpsStatus('Aguardando permissão / satélites...', 'bg-amber-400 animate-ping');
+
+      realGpsWatchId = navigator.geolocation.watchPosition(
+        onGpsPosition,
+        onGpsError,
+        { enableHighAccuracy: true, maximumAge: 1000, timeout: 20000 }
+      );
+    }
+
+    function normAngle(a) { return ((a % 360) + 360) % 360; }
+    function angleDelta(from, to) { return ((to - from + 540) % 360) - 180; }
+    function wantsRotation() { return isNavigating && followVehicle && waypoints.length > 0; }
+    function startCameraLoop() { if (!cam.raf) cam.raf = requestAnimationFrame(cameraLoop); }
+
+    function setCameraTarget(lat, lng, heading, snap = false) {
+      const now = performance.now();
+      if (cam.tLat !== null && !snap) {
+        const dtU = (now - cam.tTime) / 1000;
+        if (dtU >= 0.05 && dtU < 4) {
+          cam.vLat = (lat - cam.tLat) / dtU;
+          cam.vLng = (lng - cam.tLng) / dtU;
+        } else { cam.vLat = 0; cam.vLng = 0; }
+      } else { cam.vLat = 0; cam.vLng = 0; }
+
+      cam.tLat = lat; cam.tLng = lng; cam.tTime = now;
+      if (heading !== null && heading !== undefined && !isNaN(heading)) cam.tHeading = normAngle(heading);
+      if (cam.lat === null || snap) { cam.lat = lat; cam.lng = lng; cam.heading = cam.tHeading; }
+      startCameraLoop();
+    }
+
+    function cameraLoop(ts) {
+      cam.raf = requestAnimationFrame(cameraLoop);
+      if (!map || cam.lat === null || cam.tLat === null) { cam.last = ts; return; }
+
+      const dt = Math.min(0.1, Math.max(0.001, (ts - (cam.last || ts)) / 1000));
+      cam.last = ts;
+
+      const aPos = 1 - Math.exp(-dt * 6);
+      const aRot = 1 - Math.exp(-dt * 3.5);
+      const aOff = 1 - Math.exp(-dt * 2.5);
+
+      const ex = Math.min(1.5, (performance.now() - cam.tTime) / 1000);
+      const pLat = cam.tLat + cam.vLat * ex;
+      const pLng = cam.tLng + cam.vLng * ex;
+
+      if (distanceInMeters(cam.lat, cam.lng, pLat, pLng) > 120) { cam.lat = pLat; cam.lng = pLng; }
+      else { cam.lat += (pLat - cam.lat) * aPos; cam.lng += (pLng - cam.lng) * aPos; }
+
+      cam.heading = normAngle(cam.heading + angleDelta(cam.heading, cam.tHeading) * aRot);
+      const rotTarget = wantsRotation() ? cam.tHeading : 0;
+      cam.rot = normAngle(cam.rot + angleDelta(cam.rot, rotTarget) * aRot);
+
+      const offTarget = (isNavigating && followVehicle) ? Math.min(130, window.innerHeight * 0.14) : 0;
+      cam.offY += (offTarget - cam.offY) * aOff;
+
+      let rx = 0, ry = 0;
+      if (followVehicle && !map._animatingZoom) {
+        const z = map.getZoom();
+        const mc = map.getCenter();
+        let tgtLat = cam.lat, tgtLng = cam.lng;
+
+        if (cam.recenter) {
+          const kRe = 1 - Math.exp(-dt * 4);
+          tgtLat = mc.lat + (cam.lat - mc.lat) * kRe;
+          tgtLng = mc.lng + (cam.lng - mc.lng) * kRe;
+          if (distanceInMeters(mc.lat, mc.lng, cam.lat, cam.lng) < 2) cam.recenter = false;
+        }
+
+        const cPt = map.project(mc, z);
+        const tPt = map.project([tgtLat, tgtLng], z);
+        const dx = tPt.x - cPt.x;
+        const dy = tPt.y - cPt.y;
+        const ix = Math.trunc(dx);
+        const iy = Math.trunc(dy);
+        if (ix !== 0 || iy !== 0) map.panBy([ix, iy], { animate: false });
+        rx = dx - ix;
+        ry = dy - iy;
+      }
+
+      const mapEl = cam.mapEl || (cam.mapEl = document.getElementById('map'));
+      mapEl.style.transform = `translate3d(0px, ${cam.offY.toFixed(2)}px, 0) rotate(${(-cam.rot).toFixed(3)}deg) translate3d(${(-rx).toFixed(2)}px, ${(-ry).toFixed(2)}px, 0)`;
+
+      const cr = cam.rot.toFixed(1);
+      if (cr !== cam.lastCr) {
+        mapEl.style.setProperty('--counter-rot', cr + 'deg');
+        cam.lastCr = cr;
+      }
+
+      if (vehicleMarker) {
+        vehicleMarker.setLatLng([cam.lat, cam.lng]);
+        const ind = (cam.indicatorEl && cam.indicatorEl.isConnected) ? cam.indicatorEl : (cam.indicatorEl = document.getElementById('vehicleIndicator'));
+        if (ind) ind.style.transform = `rotate(${cam.heading.toFixed(2)}deg)`;
+      }
+    }
+
+    function updateVehicle(lat, lng, heading = null, snap = false) {
+      if (!vehicleMarker) {
+        const vehicleHtml = `
+          <div class="relative flex items-center justify-center">
+            <div class="absolute w-12 h-12 rounded-full bg-brand-500/30 sonar-wave"></div>
+            <div class="w-10 h-10 rounded-full bg-brand-600 border-2 border-white shadow-2xl flex items-center justify-center text-white text-base vehicle-marker-wrapper" id="vehicleIndicator">
+              <i class="fa-solid fa-arrow-up"></i>
+            </div>
+          </div>
+        `;
+        const icon = L.divIcon({ html: vehicleHtml, className: '', iconSize: [40, 40], iconAnchor: [20, 20] });
+        vehicleMarker = L.marker([lat, lng], { icon, zIndexOffset: 2000 }).addTo(map);
+        snap = true;
+      }
+      setCameraTarget(lat, lng, heading, snap);
+    }
+
+    function trackUserOnRoute(lat, lng, deviceHeading) {
+      let minDistance = Infinity;
+      let closestIndex = 0;
+
+      for (let i = 0; i < interpolatedPoints.length; i++) {
+        const d = distanceInMeters(lat, lng, interpolatedPoints[i].lat, interpolatedPoints[i].lng);
+        if (d < minDistance) { minDistance = d; closestIndex = i; }
+      }
+
+      if (minDistance > 60) notify('Atenção: Fora da rota traçada', 'warning');
+
+      const coveredAtUser = cumulativeDistances[closestIndex] || 0;
+      const routeBearing = routeBearingAt(coveredAtUser, 25);
+      const hasDeviceHeading = deviceHeading !== null && deviceHeading !== undefined && !isNaN(deviceHeading);
+      const targetBearing = (minDistance <= 25 || !hasDeviceHeading) ? routeBearing : deviceHeading;
+
+      updateMapRotation(targetBearing);
+      updateVehicle(lat, lng, targetBearing);
+
+      const traveled = interpolatedPoints.slice(0, closestIndex + 1).map(p => [p.lat, p.lng]);
+      progressPolyline.setLatLngs(traveled);
+
+      const covered = cumulativeDistances[closestIndex] || 0;
+      processNavigationHUD(lat, lng, closestIndex, covered);
+    }
+
+    function processNavigationHUD(lat, lng, closestIndex, coveredDist) {
+      const remainingDist = Math.max(0, totalRouteDistanceMeters - coveredDist);
+      document.getElementById('navRemainingDistance').innerText = remainingDist >= 1000 ? `${(remainingDist / 1000).toFixed(2)} km restante` : `${Math.round(remainingDist)} m restante`;
+
+      processSignals(coveredDist, closestIndex);
+
+      const distToNextEl = document.getElementById('navDistanceToNext');
+      const turnInstruction = document.getElementById('navNextInstruction');
+      const turnIcon = document.getElementById('navTurnIcon');
+      const fmt = d => d >= 1000 ? `${(d / 1000).toFixed(1)} km` : `${Math.round(d)} m`;
+
+      if (remainingDist <= 20) {
+        turnInstruction.innerText = 'Destino Atingido!';
+        distToNextEl.innerText = '0 m';
+        turnIcon.className = 'fa-solid fa-flag-checkered text-emerald-400';
+        document.getElementById('finishNavBtn').classList.remove('hidden');
+        document.getElementById('arrivalModal').classList.remove('hidden');
+        if (lastSignaledWaypoint !== 999999) {
+          lastSignaledWaypoint = 999999;
+          playTone('finish');
+          speakInstruction('Você chegou ao seu destino.');
+        }
+      } else {
+        const mi = signals.findIndex(m => m.along > coveredDist - 3);
+        if (mi === -1) {
+          turnInstruction.innerText = 'Siga em frente até o destino';
+          distToNextEl.innerText = fmt(remainingDist);
+          turnIcon.className = 'fa-solid fa-arrow-up';
+        } else {
+          const nm = signals[mi];
+          const dd = Math.max(0, nm.along - coveredDist);
+          const info = maneuverInfo(nm);
+          turnInstruction.innerText = info.t;
+          distToNextEl.innerText = fmt(dd);
+          turnIcon.className = info.i;
+          if (dd < 30 && lastSignaledWaypoint !== mi) {
+            lastSignaledWaypoint = mi;
+            playTone('waypoint');
+          }
+        }
+      }
+
+      const baseKmh = navMethod === 'sim' ? (activeSpeedLimit || SIM_BASE_SPEED_KMH) * simSpeedMultiplier : (currentSpeedKmh > 5 ? currentSpeedKmh : (activeSpeedLimit || 40));
+      document.getElementById('navRemainingTime').innerText = `${Math.round(((remainingDist / 1000) / (baseKmh || 1)) * 60)} min`;
     }
 
     function generateInterpolatedRoute() {
       interpolatedPoints = [];
       cumulativeDistances = [0];
-      totalRouteDistanceMeters = 0;
+      if (waypoints.length < 2) return;
+
+      const STEP = 2.5;
       for (let i = 0; i < waypoints.length - 1; i++) {
         const p1 = waypoints[i], p2 = waypoints[i+1];
         const segDist = distanceInMeters(p1.lat, p1.lng, p2.lat, p2.lng);
-        totalRouteDistanceMeters += segDist;
-        interpolatedPoints.push({ lat: p1.lat, lng: p1.lng });
-        cumulativeDistances.push(totalRouteDistanceMeters);
+        const steps = Math.max(1, Math.floor(segDist / STEP));
+
+        for (let s = (i === 0 ? 0 : 1); s <= steps; s++) {
+          const ratio = s / steps;
+          const lat = p1.lat + (p2.lat - p1.lat) * ratio;
+          const lng = p1.lng + (p2.lng - p1.lng) * ratio;
+          interpolatedPoints.push({ lat, lng, segmentIndex: i });
+
+          if (interpolatedPoints.length > 1) {
+            const prev = interpolatedPoints[interpolatedPoints.length - 2];
+            cumulativeDistances.push(cumulativeDistances[cumulativeDistances.length - 1] + distanceInMeters(prev.lat, prev.lng, lat, lng));
+          }
+        }
+      }
+    }
+
+    function indexAtDistance(d) {
+      const n = cumulativeDistances.length;
+      if (n === 0 || d <= 0) return 0;
+      if (d >= cumulativeDistances[n - 1]) return n - 1;
+      let lo = 0, hi = n - 1;
+      while (lo < hi - 1) {
+        const mid = (lo + hi) >> 1;
+        if (cumulativeDistances[mid] <= d) lo = mid; else hi = mid;
+      }
+      return lo;
+    }
+
+    function pointAtDistance(d) {
+      const n = interpolatedPoints.length;
+      if (n === 0) return null;
+      const total = cumulativeDistances[n - 1] || 0;
+      d = Math.max(0, Math.min(total, d));
+      const i = indexAtDistance(d);
+      if (i >= n - 1) return { lat: interpolatedPoints[n - 1].lat, lng: interpolatedPoints[n - 1].lng, idx: n - 1 };
+      const seg = cumulativeDistances[i + 1] - cumulativeDistances[i];
+      const t = seg > 0 ? (d - cumulativeDistances[i]) / seg : 0;
+      return { lat: interpolatedPoints[i].lat + (interpolatedPoints[i + 1].lat - interpolatedPoints[i].lat) * t, lng: interpolatedPoints[i].lng + (interpolatedPoints[i + 1].lng - interpolatedPoints[i].lng) * t, idx: i };
+    }
+
+    function routeBearingAt(d, ahead = 25) {
+      let a = pointAtDistance(d);
+      let b = pointAtDistance(d + ahead);
+      if (!a || !b) return currentBearing;
+      if (distanceInMeters(a.lat, a.lng, b.lat, b.lng) < 1) {
+        const back = pointAtDistance(d - ahead);
+        if (!back) return currentBearing;
+        a = back; b = pointAtDistance(d);
+      }
+      if (distanceInMeters(a.lat, a.lng, b.lat, b.lng) < 0.5) return currentBearing;
+      return calculateBearing(a.lat, a.lng, b.lat, b.lng);
+    }
+
+    function computeSignals() {
+      signals = [];
+      activeSpeedLimit = null;
+      lastSignalKey = '';
+      lastAnnouncedLimit = null;
+      overspeedActive = false;
+      if (interpolatedPoints.length < 2) return;
+      totalRouteDistanceMeters = cumulativeDistances[cumulativeDistances.length - 1] || totalRouteDistanceMeters;
+      signals = rawSignals.map(m => Object.assign({}, m, { along: m.at, done: {} })).sort((a, b) => a.along - b.along);
+    }
+
+    const ORD_WORDS = ['', 'primeira', 'segunda', 'terceira', 'quarta', 'quinta'];
+
+    function maneuverInfo(m) {
+      if (m.type === 'roundabout') return { t: `Na rotatória, pegue a ${m.exit}ª saída`, i: 'fa-solid fa-arrows-spin' };
+      if (m.type === 'uturn') return { t: 'Faça o retorno', i: 'fa-solid fa-rotate-left' };
+      const side = m.dir === 'left' ? 'esquerda' : 'direita';
+      const ang = Math.abs(m.angle || 90);
+      const arrow = m.dir === 'left' ? 'fa-arrow-left' : 'fa-arrow-right';
+      if (ang < 60) return { t: `Curva leve à ${side}`, i: `fa-solid fa-arrow-up ${m.dir === 'left' ? '-rotate-45' : 'rotate-45'}` };
+      if (ang >= 120) return { t: `Curva fechada à ${side}`, i: `fa-solid ${arrow}` };
+      return { t: `Vire à ${side}`, i: `fa-solid ${arrow}` };
+    }
+
+    function maneuverSpeechBody(m) {
+      const side = m.dir === 'left' ? 'esquerda' : 'direita';
+      if (m.type === 'roundabout') return `rotatória, pegue a ${ORD_WORDS[m.exit] || m.exit} saída`;
+      if (m.type === 'uturn') return 'faça o retorno';
+      const ang = Math.abs(m.angle || 90);
+      if (ang < 60) return `curva leve à ${side}`;
+      if (ang >= 120) return `curva fechada à ${side}`;
+      return `vire à ${side}`;
+    }
+
+    function renderSignalMarkers() {
+      signals.forEach(sig => {
+        const pt = pointAtDistance(sig.along);
+        if (!pt) return;
+        let cls = 'sig-curve', inner;
+        if (sig.type === 'roundabout') { cls = 'sig-round'; inner = '<i class="fa-solid fa-arrows-spin"></i>' + (sig.exit ? `<span style="font-size:9px;margin-left:1px">${sig.exit}</span>` : ''); }
+        else if (sig.type === 'uturn') { inner = '<i class="fa-solid fa-rotate-left"></i>'; }
+        else { inner = `<i class="fa-solid fa-arrow-turn-right${sig.dir === 'left' ? ' fa-flip-horizontal' : ''}"></i>`; }
+
+        const html = `<div class="counter-rot"><div class="sig-pin ${cls}">${inner}</div></div>`;
+        L.marker([pt.lat, pt.lng], { icon: L.divIcon({ html, className: '', iconSize: [32, 32], iconAnchor: [16, 16] }), zIndexOffset: 500 }).addTo(markersLayer);
+      });
+    }
+
+    const SIGNAL_STAGES = [300];
+
+    function announceSignal(sig, ahead) {
+      const dist = ahead >= 270 ? 300 : Math.max(50, Math.round(ahead / 50) * 50);
+      playTone('alert50m');
+      speakInstruction(`Em ${dist === 300 ? 'trezentos' : dist} metros, ${maneuverSpeechBody(sig)}.`, true);
+    }
+
+    function announceSpeedLimit(limit) {
+      playTone('speed');
+      speakInstruction(`Limite de velocidade, ${limit} quilômetros por hora.`, true);
+    }
+
+    function processSignals(coveredDist, closestIndex) {
+      const ip = interpolatedPoints[closestIndex];
+      const seg = ip && ip.segmentIndex !== undefined ? ip.segmentIndex : 0;
+      const wp = waypoints[Math.min(seg, waypoints.length - 1)];
+      const limit = wp && wp.speedLimit > 0 ? wp.speedLimit : null;
+
+      activeSpeedLimit = limit;
+      if (limit !== lastAnnouncedLimit) {
+        lastAnnouncedLimit = limit;
+        overspeedActive = false;
+        if (limit) announceSpeedLimit(limit);
+      }
+
+      const limitSign = document.getElementById('navLimitSign');
+      if (limit) {
+        document.getElementById('navLimitValue').innerText = limit;
+        limitSign.classList.remove('hidden');
+      } else { limitSign.classList.add('hidden'); }
+
+      const isOver = !!limit && currentSpeedKmh > limit + 2;
+      const backUnder = !limit || currentSpeedKmh <= limit;
+      if (isOver && !overspeedActive) {
+        overspeedActive = true;
+        playTone('overspeed');
+        speakInstruction('Acima do limite de velocidade.', true);
+      } else if (backUnder) { overspeedActive = false; }
+
+      const over = overspeedActive;
+      const box = document.getElementById('navSpeedBox');
+      const spd = document.getElementById('navCurrentSpeed');
+      box.classList.toggle('border-rose-500', over);
+      box.classList.toggle('bg-rose-600/40', over);
+      spd.classList.toggle('text-rose-300', over);
+      spd.classList.toggle('text-brand-300', !over);
+
+      for (const sig of signals) {
+        const ahead = sig.along - coveredDist;
+        if (ahead > SIGNAL_STAGES[0] + 100) sig.done = {};
+        if (ahead > 0 && ahead <= SIGNAL_STAGES[0]) {
+          let stage = null;
+          for (const t of SIGNAL_STAGES) if (ahead <= t) stage = t;
+          if (stage && !sig.done[stage]) {
+            SIGNAL_STAGES.forEach(t => { if (t >= stage) sig.done[t] = true; });
+            announceSignal(sig, ahead);
+          }
+        }
       }
     }
 
@@ -206,99 +1410,80 @@
       return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
     }
 
-    function startRealGps() {
-      if (!navigator.geolocation) return;
-      navigator.geolocation.watchPosition(
-        pos => {
-          userLat = pos.coords.latitude;
-          userLng = pos.coords.longitude;
-          currentSpeedKmh = pos.coords.speed ? Math.round(pos.coords.speed * 3.6) : 0;
-          currentBearing = pos.coords.heading || 0;
-
-          document.getElementById('gpsStatusText').innerText = `GPS Ligado (±${Math.round(pos.coords.accuracy)}m)`;
-          document.getElementById('gpsLiveDot').className = 'w-3 h-3 rounded-full bg-emerald-400 shrink-0';
-          document.getElementById('navCurrentSpeed').innerText = currentSpeedKmh;
-
-          updateVehicle(userLat, userLng, currentBearing);
-          sendTelemetry(userLat, userLng, currentBearing, currentSpeedKmh);
-
-          if (isNavigating && waypoints.length > 0) {
-            updateNavigationHUD(userLat, userLng);
-          }
-        },
-        err => {
-          document.getElementById('gpsStatusText').innerText = 'Sem sinal GPS';
-          document.getElementById('gpsLiveDot').className = 'w-3 h-3 rounded-full bg-rose-500 shrink-0';
-        },
-        { enableHighAccuracy: true, maximumAge: 1000, timeout: 10000 }
-      );
+    function calculateBearing(lat1, lon1, lat2, lon2) {
+      const toRad = Math.PI / 180;
+      const dLon = (lon2 - lon1) * toRad;
+      const y = Math.sin(dLon) * Math.cos(lat2 * toRad);
+      const x = Math.cos(lat1 * toRad) * Math.sin(lat2 * toRad) - Math.sin(lat1 * toRad) * Math.cos(lat2 * toRad) * Math.cos(dLon);
+      return ((Math.atan2(y, x) * (180 / Math.PI)) + 360) % 360;
     }
 
-    // 📡 TRANSMISSÃO AUTOMÁTICA DA LOCALIZAÇÃO PARA O PAINEL DO EDITOR
-    function sendTelemetry(lat, lng, heading, speed) {
-      const now = Date.now();
-      if (now - lastTelemetryTime < 5000) return; // Envia a cada 5 segundos
-      lastTelemetryTime = now;
-
-      fetch(`${API_BASE_URL}/telemetry`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          user_id: sessionUser.id,
-          username: sessionUser.username,
-          name: sessionUser.name,
-          role: sessionUser.role,
-          latitude: lat,
-          longitude: lng,
-          heading: heading || 0,
-          speed_kmh: speed || 0
-        })
-      }).catch(() => {});
-    }
-
-    function updateVehicle(lat, lng, heading) {
-      if (!vehicleMarker) {
-        const html = `
-          <div class="relative flex items-center justify-center">
-            <div class="absolute w-12 h-12 rounded-full bg-indigo-500/30 sonar-wave"></div>
-            <div id="vehicleIndicator" class="w-10 h-10 rounded-full bg-indigo-600 border-2 border-white shadow-2xl flex items-center justify-center text-white text-base vehicle-marker-wrapper">
-              <i class="fa-solid fa-arrow-up"></i>
-            </div>
-          </div>
-        `;
-        const icon = L.divIcon({ html, className: '', iconSize: [40, 40], iconAnchor: [20, 20] });
-        vehicleMarker = L.marker([lat, lng], { icon, zIndexOffset: 2000 }).addTo(map);
-      } else {
-        vehicleMarker.setLatLng([lat, lng]);
-        const el = document.getElementById('vehicleIndicator');
-        if (el) el.style.transform = `rotate(${heading}deg)`;
-      }
-
-      if (followVehicle) map.panTo([lat, lng], { animate: true, duration: 0.5 });
-    }
-
-    function updateNavigationHUD(lat, lng) {
-      const lastPoint = waypoints[waypoints.length - 1];
-      const distToDest = distanceInMeters(lat, lng, lastPoint.lat, lastPoint.lng);
-      document.getElementById('navRemainingDistance').innerHTML = `<i class="fa-solid fa-flag-checkered text-indigo-400 mr-1"></i>${distToDest >= 1000 ? (distToDest / 1000).toFixed(2) + ' km' : Math.round(distToDest) + ' m'}`;
-      document.getElementById('navDistanceToNext').innerText = distToDest >= 1000 ? (distToDest / 1000).toFixed(1) + ' km' : Math.round(distToDest) + ' m';
-    }
-
-    function cancelRoute() {
-      isNavigating = false;
-      mainPolyline.setLatLngs([]);
-      progressPolyline.setLatLngs([]);
-      document.getElementById('navHud').classList.add('hidden');
-      document.getElementById('searchInput').value = '';
-    }
-
-    function toggleFollowCamera() {
-      followVehicle = !followVehicle;
-      document.getElementById('btnFollowCam').className = followVehicle ? 'w-10 h-10 rounded-xl bg-indigo-600 text-white border border-indigo-500 shadow flex items-center justify-center' : 'w-10 h-10 rounded-xl bg-slate-900/90 text-slate-400 border border-slate-700/80 shadow flex items-center justify-center';
+    function fitRouteBounds() {
+      if (waypoints.length === 0) return;
+      setFollow(false, true);
+      const vp = document.getElementById('map-viewport');
+      const size = map.getSize();
+      const padX = Math.max(0, (size.x - vp.clientWidth) / 2) + 50;
+      const padY = Math.max(0, (size.y - vp.clientHeight) / 2) + 50;
+      map.fitBounds(L.latLngBounds(waypoints.map(p => [p.lat, p.lng])), { paddingTopLeft: [padX, padY + 120], paddingBottomRight: [padX, padY + 150], animate: false });
     }
 
     function findMyCurrentLocation() {
-      if (userLat && userLng) map.setView([userLat, userLng], 17);
+      if (userLat && userLng) {
+        setFollow(true, true);
+        map.setView([userLat, userLng], isNavigating ? 18 : 16, { animate: false });
+        setCameraTarget(userLat, userLng, null, true);
+        notify('Posição atual centralizada', 'info');
+      } else { notify('Aguardando sinal GPS...', 'warning'); }
+    }
+
+    function setFollow(on, silent = false) {
+      if (on && !followVehicle) cam.recenter = true;
+      followVehicle = on;
+      document.getElementById('btnFollowCam').className = on ? 'w-10 h-10 rounded-xl bg-brand-600 text-white border border-brand-500 shadow-xl flex items-center justify-center active:scale-95 transition' : 'w-10 h-10 rounded-xl bg-slate-900/90 text-slate-400 border border-slate-700/80 shadow-xl flex items-center justify-center active:scale-95 transition';
+      if (!silent) notify(on ? 'Câmera fixada no veículo' : 'Câmera livre', 'info');
+    }
+
+    function toggleFollowCamera() { setFollow(!followVehicle); }
+    function toggleLayerMenu() { document.getElementById('layerMenuDropdown').classList.toggle('hidden'); }
+
+    document.addEventListener('click', (e) => {
+      const menu = document.getElementById('layerMenuDropdown');
+      const btn = document.getElementById('btnLayerToggle');
+      if (menu && !menu.classList.contains('hidden') && !menu.contains(e.target) && !btn.contains(e.target)) menu.classList.add('hidden');
+
+      const searchCard = document.getElementById('searchResultsCard');
+      const searchInput = document.getElementById('searchInput');
+      if (searchCard && !searchCard.classList.contains('hidden') && !searchCard.contains(e.target) && e.target !== searchInput) searchCard.classList.add('hidden');
+    });
+
+    function switchBaseLayer(key) {
+      if (!BASE_LAYERS[key]) return;
+      if (currentTileLayer) map.removeLayer(currentTileLayer);
+      currentTileLayer = L.tileLayer(BASE_LAYERS[key].url, BASE_LAYERS[key].options).addTo(map);
+      currentTileLayer.bringToBack();
+      activeLayerKey = key;
+      const menu = document.getElementById('layerMenuDropdown');
+      if (menu) menu.classList.add('hidden');
+    }
+
+    let toastTimer = null;
+    function notify(message, type = 'info') {
+      const toast = document.getElementById('toastNotification');
+      document.getElementById('toastMessage').innerText = message;
+      const icon = document.getElementById('toastIcon');
+      if (type === 'success') icon.className = 'fa-solid fa-circle-check text-emerald-400';
+      else if (type === 'warning') icon.className = 'fa-solid fa-triangle-exclamation text-amber-400';
+      else if (type === 'danger') icon.className = 'fa-solid fa-circle-xmark text-rose-400';
+      else icon.className = 'fa-solid fa-circle-info text-brand-400';
+
+      toast.classList.remove('opacity-0', 'pointer-events-none', '-translate-y-4');
+      toast.classList.add('opacity-100', 'translate-y-0');
+      if (toastTimer) clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => {
+        toast.classList.add('opacity-0', 'pointer-events-none', '-translate-y-4');
+        toast.classList.remove('opacity-100', 'translate-y-0');
+      }, 3000);
     }
   </script>
 </body>

@@ -3,198 +3,159 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>GeoNav Studio - Gestão de Rotas & Cercas</title>
+  <title>GeoNav Studio - Editor</title>
 
-  <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
-
-  <!-- Leaflet CSS & JS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
-
-  <!-- Font Awesome -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-
-  <script>
-    tailwind.config = {
-      darkMode: 'class',
-      theme: {
-        extend: {
-          fontFamily: { sans: ['Inter', 'sans-serif'] },
-          colors: {
-            brand: { 50: '#eef2ff', 100: '#e0e7ff', 500: '#6366f1', 600: '#4f46e5', 700: '#4338ca' }
-          }
-        }
-      }
-    }
-  </script>
 
   <style>
     * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
-    body { font-family: 'Inter', sans-serif; touch-action: manipulation; user-select: none; }
+    body { font-family: 'Inter', sans-serif; user-select: none; }
     #map { height: 100%; width: 100%; z-index: 5; }
-    .safe-top-header { padding-top: max(8px, env(safe-area-inset-top)); min-height: calc(52px + env(safe-area-inset-top, 0px)); }
-    .safe-bottom-panel { bottom: max(12px, env(safe-area-inset-bottom, 0px)) !important; }
     .custom-marker-pin { display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 800; border-radius: 9999px; border: 2px solid #fff; box-shadow: 0 4px 10px rgba(0,0,0,0.45); }
-    .fence-vertex-handle { width: 16px; height: 16px; background-color: #ef4444; border: 2.5px solid #fff; border-radius: 9999px; cursor: grab; }
-    .fence-speed-badge, .segment-speed-badge { display: inline-flex; align-items: center; gap: 4px; color: #fff; font-weight: 800; font-size: 10px; padding: 2px 6px; border-radius: 9999px; border: 1.5px solid #fff; box-shadow: 0 3px 10px rgba(0,0,0,0.5); transform: translate(-50%, -50%); }
-    .fence-speed-badge { background: rgba(220, 38, 38, 0.92); font-size: 11px; padding: 3px 8px; }
-    .badge-paved { background: rgba(37, 99, 235, 0.92); }
-    .badge-unpaved { background: rgba(217, 119, 6, 0.92); }
-    .mid-handle { width: 12px; height: 12px; border-radius: 9999px; background: rgba(255,255,255,.92); border: 2px solid #4f46e5; cursor: grab; }
-    .no-scrollbar::-webkit-scrollbar { display: none; }
-    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    .sidebar-expanded { width: 240px; }
+    .sidebar-collapsed { width: 68px; }
   </style>
 </head>
 
-<body class="bg-slate-950 text-slate-100 h-full w-full overflow-hidden flex flex-col antialiased">
+<body class="bg-slate-950 text-slate-100 h-full w-full overflow-hidden flex antialiased">
 
-  <!-- CABEÇALHO PRINCIPAL -->
-  <header class="safe-top-header bg-slate-900/95 backdrop-blur-md border-b border-slate-800/80 px-2 sm:px-4 flex items-center justify-between z-30 shrink-0 shadow-lg">
-    <div class="flex items-center gap-2">
-      <div class="w-8 h-8 rounded-xl bg-gradient-to-tr from-brand-600 via-indigo-500 to-cyan-400 flex items-center justify-center shadow-lg shadow-brand-500/25 shrink-0">
-        <i class="fa-solid fa-truck-moving text-white text-xs"></i>
+  <!-- 🍔 MENU LATERAL RETRÁTIL EXPANSÍVEL -->
+  <aside id="mainSidebar" class="sidebar-collapsed transition-all duration-300 bg-slate-900 border-r border-slate-800 flex flex-col justify-between z-40 shrink-0">
+    <div>
+      <!-- Topo do Menu com Toggle -->
+      <div class="h-16 flex items-center justify-between px-4 border-b border-slate-800/80">
+        <div class="flex items-center gap-3 overflow-hidden">
+          <div class="w-9 h-9 rounded-xl bg-indigo-600 flex items-center justify-center text-white shrink-0 shadow-lg shadow-indigo-600/30">
+            <i class="fa-solid fa-truck-moving text-sm"></i>
+          </div>
+          <span class="sidebar-text hidden font-black text-white text-sm tracking-tight whitespace-nowrap">GeoNav Studio</span>
+        </div>
+        <button onclick="toggleSidebar()" class="w-8 h-8 rounded-lg bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center">
+          <i id="sidebarToggleIcon" class="fa-solid fa-chevron-right text-xs"></i>
+        </button>
       </div>
-      <div>
-        <h1 class="text-xs sm:text-sm font-extrabold tracking-tight text-white flex items-center gap-1.5">
-          GeoNav <span class="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">EDITOR</span>
-        </h1>
+
+      <!-- Identificação da Empresa -->
+      <div class="p-3 border-b border-slate-800/60 flex items-center gap-2 overflow-hidden">
+        <div class="w-2.5 h-2.5 rounded-full bg-emerald-400 shrink-0"></div>
+        <span id="companyBadge" class="sidebar-text hidden text-[11px] font-bold text-slate-300 truncate">Empresa</span>
       </div>
+
+      <!-- Ícones / Ferramentas -->
+      <nav class="p-2 space-y-1.5">
+        <button onclick="setAppMode('edit')" id="navEditBtn" title="Desenhar Rotas" class="w-full flex items-center gap-3.5 px-3 py-2.5 rounded-xl bg-indigo-600 text-white font-semibold text-xs transition">
+          <i class="fa-solid fa-bezier-curve text-sm shrink-0"></i>
+          <span class="sidebar-text hidden whitespace-nowrap">Desenhar Rotas</span>
+        </button>
+
+        <button onclick="setAppMode('fence')" id="navFenceBtn" title="Cercas Geográficas" class="w-full flex items-center gap-3.5 px-3 py-2.5 rounded-xl text-slate-400 hover:bg-slate-800 hover:text-white font-semibold text-xs transition">
+          <i class="fa-solid fa-draw-polygon text-sm shrink-0"></i>
+          <span class="sidebar-text hidden whitespace-nowrap">Cercas Virtuais</span>
+        </button>
+
+        <button onclick="toggleTrackingModal()" title="Monitoramento em Tempo Real" class="w-full flex items-center gap-3.5 px-3 py-2.5 rounded-xl text-amber-400 hover:bg-amber-500/10 font-semibold text-xs transition">
+          <i class="fa-solid fa-tower-broadcast text-sm shrink-0 animate-pulse"></i>
+          <span class="sidebar-text hidden whitespace-nowrap">Monitoramento</span>
+        </button>
+
+        <button onclick="toggleRouteManagerModal()" title="Rotas Guardadas" class="w-full flex items-center gap-3.5 px-3 py-2.5 rounded-xl text-emerald-400 hover:bg-emerald-500/10 font-semibold text-xs transition">
+          <i class="fa-solid fa-database text-sm shrink-0"></i>
+          <span class="sidebar-text hidden whitespace-nowrap">Rotas Guardadas</span>
+        </button>
+
+        <button onclick="window.location.href='index_gps.html'" title="Mudar para Navegação GPS" class="w-full flex items-center gap-3.5 px-3 py-2.5 rounded-xl text-indigo-300 hover:bg-indigo-500/10 font-semibold text-xs transition">
+          <i class="fa-solid fa-location-arrow text-sm shrink-0"></i>
+          <span class="sidebar-text hidden whitespace-nowrap">Abrir Navegador</span>
+        </button>
+      </nav>
     </div>
 
-    <!-- SELETOR DE MODO -->
-    <div class="flex items-center bg-slate-800/90 p-0.5 sm:p-1 rounded-xl border border-slate-700/60 shadow-inner">
-      <button id="btnModeEdit" onclick="setAppMode('edit')" class="px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-lg text-[11px] sm:text-xs font-bold flex items-center gap-1 transition-all bg-brand-600 text-white shadow">
-        <i class="fa-solid fa-bezier-curve text-[10px]"></i>
-        <span>Desenhar</span>
-      </button>
-      <button id="btnModeSpeed" onclick="setAppMode('speed')" class="px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-lg text-[11px] sm:text-xs font-bold flex items-center gap-1 transition-all text-slate-400 hover:text-white">
-        <i class="fa-solid fa-gauge-high text-[10px]"></i>
-        <span>Velocidade</span>
-      </button>
-      <button id="btnModeFence" onclick="setAppMode('fence')" class="px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-lg text-[11px] sm:text-xs font-bold flex items-center gap-1 transition-all text-slate-400 hover:text-white">
-        <i class="fa-solid fa-draw-polygon text-[10px]"></i>
-        <span>Cercas</span>
+    <!-- Rodapé do Menu (Sair) -->
+    <div class="p-2 border-t border-slate-800">
+      <button onclick="logout()" title="Terminar Sessão" class="w-full flex items-center gap-3.5 px-3 py-2.5 rounded-xl text-rose-400 hover:bg-rose-500/10 text-xs font-semibold transition">
+        <i class="fa-solid fa-power-off text-sm shrink-0"></i>
+        <span class="sidebar-text hidden whitespace-nowrap">Sair do Sistema</span>
       </button>
     </div>
+  </aside>
 
-    <!-- BOTÕES DE GESTÃO, MONITORIZAÇÃO E ACESSO -->
-    <div class="flex items-center gap-1">
-      <button onclick="window.location.href='index_gps.html'" title="Mudar para Modo Navegador" class="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-indigo-400 text-xs font-bold border border-indigo-500/30 flex items-center gap-1 transition">
-        <i class="fa-solid fa-location-arrow text-xs"></i>
-        <span class="hidden md:inline">Navegar</span>
-      </button>
-
-      <button id="btnToggleTracking" onclick="toggleTrackingModal()" title="Monitorizar Utilizadores" class="px-2.5 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-xs font-bold border border-amber-500/40 flex items-center gap-1 transition">
-        <i class="fa-solid fa-tower-broadcast animate-pulse text-xs"></i>
-        <span class="hidden md:inline">Monitorizar</span>
-      </button>
-
-      <button onclick="toggleRouteManagerModal()" title="Rotas Guardadas" class="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center rounded-xl bg-emerald-950/40 hover:bg-emerald-900/50 border border-emerald-500/40 text-emerald-300 transition">
-        <i class="fa-solid fa-database text-xs"></i>
-      </button>
-
-      <button onclick="logout()" title="Terminar Sessão" class="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center rounded-xl bg-slate-800 hover:bg-rose-950/50 border border-slate-700 hover:border-rose-500/40 text-slate-400 hover:text-rose-400 transition">
-        <i class="fa-solid fa-power-off text-xs"></i>
-      </button>
-    </div>
-  </header>
-
+  <!-- ÁREA CENTRAL DO MAPA -->
   <main class="relative flex-1 w-full h-full overflow-hidden">
     <div id="map"></div>
 
-    <!-- Controles Flutuantes -->
-    <div class="absolute right-2.5 top-16 sm:top-20 flex flex-col gap-1.5 z-20">
-      <button onclick="map.zoomIn()" class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-slate-900/90 text-slate-200 border border-slate-700/80 shadow flex items-center justify-center hover:bg-slate-800"><i class="fa-solid fa-plus text-xs"></i></button>
-      <button onclick="map.zoomOut()" class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-slate-900/90 text-slate-200 border border-slate-700/80 shadow flex items-center justify-center hover:bg-slate-800"><i class="fa-solid fa-minus text-xs"></i></button>
-      <button onclick="fitRouteBounds()" title="Enquadrar Rota" class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-slate-900/90 text-slate-200 border border-slate-700/80 shadow flex items-center justify-center hover:bg-slate-800"><i class="fa-solid fa-expand text-xs"></i></button>
-      <button onclick="findMyCurrentLocation()" title="Minha Posição" class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-slate-900/90 text-indigo-400 border border-slate-700/80 shadow flex items-center justify-center hover:bg-slate-800"><i class="fa-solid fa-crosshairs text-xs"></i></button>
+    <!-- Controles Flutuantes à Direita -->
+    <div class="absolute right-3 top-4 flex flex-col gap-1.5 z-20">
+      <button onclick="map.zoomIn()" class="w-10 h-10 rounded-xl bg-slate-900/90 text-slate-200 border border-slate-700/80 shadow flex items-center justify-center hover:bg-slate-800"><i class="fa-solid fa-plus text-xs"></i></button>
+      <button onclick="map.zoomOut()" class="w-10 h-10 rounded-xl bg-slate-900/90 text-slate-200 border border-slate-700/80 shadow flex items-center justify-center hover:bg-slate-800"><i class="fa-solid fa-minus text-xs"></i></button>
+      <button onclick="fitRouteBounds()" title="Enquadrar Rota" class="w-10 h-10 rounded-xl bg-slate-900/90 text-slate-200 border border-slate-700/80 shadow flex items-center justify-center hover:bg-slate-800"><i class="fa-solid fa-expand text-xs"></i></button>
+      <button onclick="findMyCurrentLocation()" title="Minha Posição" class="w-10 h-10 rounded-xl bg-slate-900/90 text-indigo-400 border border-slate-700/80 shadow flex items-center justify-center hover:bg-slate-800"><i class="fa-solid fa-crosshairs text-xs"></i></button>
     </div>
 
-    <!-- PAINEL: MODO DESENHAR ROTA -->
-    <div id="editToolbar" class="safe-bottom-panel absolute left-2.5 right-2.5 md:left-1/2 md:-translate-x-1/2 md:w-[680px] bg-slate-900/95 backdrop-blur-md rounded-2xl border border-slate-800 shadow-2xl p-3 z-20 flex flex-col gap-2.5">
-      <div class="flex items-center justify-between border-b border-slate-800 pb-2">
-        <div class="flex items-center gap-2 text-[11px]">
-          <span id="routePointsCount" class="font-bold text-emerald-400">0 pts</span>
-          <span class="text-slate-600">|</span>
-          <span id="routeTotalDistance" class="font-bold text-white">0.00 km</span>
-        </div>
-        <div class="flex items-center gap-1">
-          <button onclick="undoLastWaypoint()" class="px-2 py-1 rounded-lg bg-slate-800 text-slate-300 text-xs font-semibold hover:bg-slate-700 border border-slate-700">Desfazer</button>
-          <button onclick="clearCurrentRoute()" class="px-2 py-1 rounded-lg bg-rose-500/10 text-rose-300 text-xs font-semibold hover:bg-rose-500/20 border border-rose-500/30">Limpar</button>
-        </div>
+    <!-- PAINEL INFERIOR: MODO ROTAS -->
+    <div id="editToolbar" class="absolute bottom-4 left-3 right-3 md:left-1/2 md:-translate-x-1/2 md:w-[620px] bg-slate-900/95 backdrop-blur-md rounded-2xl border border-slate-800 shadow-2xl p-3 z-20 flex items-center justify-between">
+      <div class="flex items-center gap-3 text-xs">
+        <span id="routePointsCount" class="font-bold text-emerald-400">0 pts</span>
+        <span class="text-slate-600">|</span>
+        <span id="routeTotalDistance" class="font-bold text-white">0.00 km</span>
       </div>
-      <div class="flex items-center justify-end gap-2">
-        <button onclick="openSaveModal()" class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow flex items-center gap-1.5 transition">
+      <div class="flex items-center gap-2">
+        <button onclick="undoLastWaypoint()" class="px-2.5 py-1.5 rounded-xl bg-slate-800 text-slate-300 text-xs hover:bg-slate-700 border border-slate-700">Desfazer</button>
+        <button onclick="clearCurrentRoute()" class="px-2.5 py-1.5 rounded-xl bg-rose-500/10 text-rose-300 text-xs hover:bg-rose-500/20 border border-rose-500/30">Limpar</button>
+        <button onclick="openSaveModal()" class="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow flex items-center gap-1.5">
           <i class="fa-solid fa-cloud-arrow-up"></i>
-          <span>Guardar Rota no Banco</span>
+          <span>Guardar Rota</span>
         </button>
       </div>
     </div>
 
-    <!-- PAINEL: MODO CERCA -->
-    <div id="fenceToolbar" class="safe-bottom-panel hidden absolute left-2.5 right-2.5 md:left-1/2 md:-translate-x-1/2 md:w-[680px] bg-slate-900/95 backdrop-blur-md rounded-2xl border border-rose-500/40 shadow-2xl p-3 z-20 flex flex-col gap-2.5">
-      <div class="flex items-center justify-between border-b border-slate-800 pb-2 text-xs">
-        <span id="fenceEditStatus" class="font-bold text-rose-300">A desenhar Nova Cerca</span>
-        <span id="fencePointsCount" class="text-slate-400">0 vértices</span>
+    <!-- PAINEL INFERIOR: MODO CERCAS -->
+    <div id="fenceToolbar" class="hidden absolute bottom-4 left-3 right-3 md:left-1/2 md:-translate-x-1/2 md:w-[620px] bg-slate-900/95 backdrop-blur-md rounded-2xl border border-rose-500/40 shadow-2xl p-3 z-20 flex items-center justify-between">
+      <div class="text-xs font-bold text-rose-300">
+        Desenhar Cerca: <span id="fencePointsCount" class="text-white font-normal">0 vértices</span>
       </div>
-      <div class="flex items-center justify-between">
+      <div class="flex items-center gap-2">
         <button onclick="clearCurrentFenceDraft()" class="px-2.5 py-1.5 rounded-xl bg-slate-800 text-slate-300 text-xs">Limpar</button>
-        <button onclick="openSaveFenceModal()" class="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold shadow flex items-center gap-1.5">
+        <button onclick="openSaveFenceModal()" class="px-3.5 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow flex items-center gap-1.5">
           <i class="fa-solid fa-check"></i>
-          <span>Definir Velocidade & Guardar</span>
+          <span>Guardar Cerca</span>
         </button>
       </div>
     </div>
   </main>
 
-  <!-- MODAL: MONITORIZAÇÃO DE UTILIZADORES LIGADOS -->
+  <!-- MODAL: MONITORIZAÇÃO EM TEMPO REAL -->
   <div id="trackingModal" class="hidden fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-3">
     <div class="bg-slate-900 border border-amber-500/40 rounded-2xl w-full max-w-md shadow-2xl flex flex-col max-h-[80vh] overflow-hidden">
       <div class="p-3.5 border-b border-slate-800 flex items-center justify-between">
-        <h3 class="font-bold text-xs sm:text-sm text-white flex items-center gap-2">
+        <h3 class="font-bold text-sm text-white flex items-center gap-2">
           <i class="fa-solid fa-tower-broadcast text-amber-400"></i>
-          Utilizadores e Veículos Conectados
+          Veículos Ativos na Organização
         </h3>
-        <button onclick="toggleTrackingModal()" class="w-7 h-7 rounded-lg bg-slate-800 text-slate-400 flex items-center justify-center">
-          <i class="fa-solid fa-xmark text-xs"></i>
-        </button>
+        <button onclick="toggleTrackingModal()" class="w-7 h-7 rounded-lg bg-slate-800 text-slate-400 flex items-center justify-center"><i class="fa-solid fa-xmark"></i></button>
       </div>
-      <div id="connectedUsersContainer" class="p-3.5 overflow-y-auto space-y-2 no-scrollbar text-xs">
-        <p class="text-slate-400 text-center py-4"><i class="fa-solid fa-spinner fa-spin mr-2"></i>A carregar localizações...</p>
-      </div>
+      <div id="connectedUsersContainer" class="p-3.5 overflow-y-auto space-y-2 text-xs no-scrollbar"></div>
     </div>
   </div>
 
-  <!-- MODAL: GRAVAR ROTA -->
+  <!-- MODAIS DE GRAVAÇÃO E ROTAS -->
   <div id="saveModal" class="hidden fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-3">
-    <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-sm shadow-2xl p-4 flex flex-col gap-3">
-      <h3 class="font-bold text-sm text-white">Guardar Rota na Nuvem</h3>
-      <input id="routeNameInput" type="text" placeholder="Nome da Rota" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-sm p-4 flex flex-col gap-3">
+      <h3 class="font-bold text-sm text-white">Guardar Rota na Empresa</h3>
+      <input id="routeNameInput" type="text" placeholder="Nome da Rota" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none">
       <div class="flex justify-end gap-2 pt-2 border-t border-slate-800">
         <button onclick="closeSaveModal()" class="px-3 py-1.5 rounded-xl bg-slate-800 text-slate-300 text-xs">Cancelar</button>
-        <button id="btnConfirmSave" onclick="confirmSaveRoute()" class="px-3.5 py-1.5 rounded-xl bg-emerald-600 text-white font-bold text-xs">Guardar</button>
+        <button onclick="confirmSaveRoute()" class="px-3.5 py-1.5 rounded-xl bg-emerald-600 text-white font-bold text-xs">Guardar</button>
       </div>
     </div>
   </div>
 
-  <!-- MODAL: GESTOR DE ROTAS -->
-  <div id="routeManagerModal" class="hidden fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-3">
-    <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg shadow-2xl flex flex-col max-h-[80vh] overflow-hidden">
-      <div class="p-3.5 border-b border-slate-800 flex items-center justify-between">
-        <h3 class="font-bold text-sm text-white">Rotas Guardadas na Base de Dados</h3>
-        <button onclick="toggleRouteManagerModal()" class="w-7 h-7 rounded-lg bg-slate-800 text-slate-400 flex items-center justify-center"><i class="fa-solid fa-xmark"></i></button>
-      </div>
-      <div id="savedRoutesContainer" class="p-3.5 overflow-y-auto space-y-2 text-xs no-scrollbar"></div>
-    </div>
-  </div>
-
-  <!-- MODAL: GRAVAR CERCA -->
   <div id="saveFenceModal" class="hidden fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-3">
-    <div class="bg-slate-900 border border-rose-500/40 rounded-2xl w-full max-w-sm shadow-2xl p-4 flex flex-col gap-3">
+    <div class="bg-slate-900 border border-rose-500/40 rounded-2xl w-full max-w-sm p-4 flex flex-col gap-3">
       <h3 class="font-bold text-sm text-white">Definir Restrição de Cerca</h3>
       <input id="fenceNameInput" type="text" placeholder="Identificação da Área" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white">
       <div class="flex items-center gap-2">
@@ -204,49 +165,63 @@
       </div>
       <div class="flex justify-end gap-2 pt-2 border-t border-slate-800">
         <button onclick="closeSaveFenceModal()" class="px-3 py-1.5 rounded-xl bg-slate-800 text-slate-300 text-xs">Cancelar</button>
-        <button onclick="confirmSaveFence()" class="px-3.5 py-1.5 rounded-xl bg-rose-600 text-white font-bold text-xs">Guardar Cerca</button>
+        <button onclick="confirmSaveFence()" class="px-3.5 py-1.5 rounded-xl bg-rose-600 text-white font-bold text-xs">Guardar</button>
       </div>
     </div>
   </div>
 
-  <div id="toastNotification" class="fixed top-14 left-1/2 -translate-x-1/2 z-50 transition-all duration-300 opacity-0 pointer-events-none transform -translate-y-4">
-    <div class="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-800 border border-slate-700 text-xs text-white shadow-2xl">
-      <i id="toastIcon" class="fa-solid fa-circle-check text-emerald-400"></i>
-      <span id="toastMessage"></span>
+  <div id="routeManagerModal" class="hidden fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-3">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md flex flex-col max-h-[80vh] overflow-hidden">
+      <div class="p-3.5 border-b border-slate-800 flex items-center justify-between">
+        <h3 class="font-bold text-sm text-white">Rotas Guardadas</h3>
+        <button onclick="toggleRouteManagerModal()" class="w-7 h-7 rounded-lg bg-slate-800 text-slate-400 flex items-center justify-center"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div id="savedRoutesContainer" class="p-3.5 overflow-y-auto space-y-2 text-xs no-scrollbar"></div>
     </div>
   </div>
 
   <script>
     const API_BASE_URL = 'https://teste1-p5pw.onrender.com/api';
 
-    // 🔒 CONTROLO DE SESSÃO DO UTILIZADOR
     const sessionUser = JSON.parse(localStorage.getItem('geonav_session') || 'null');
     if (!sessionUser || sessionUser.role !== 'editor') {
       window.location.href = 'login.html';
     }
+
+    document.getElementById('companyBadge').innerText = sessionUser.company_name || 'Organização';
 
     function logout() {
       localStorage.removeItem('geonav_session');
       window.location.href = 'login.html';
     }
 
-    let map = null;
-    let waypoints = [];
-    let markersLayer = null;
-    let routeSegmentsLayer = null;
-    let fences = [];
-    let currentFencePoints = [];
-    let savedFencesLayer = null;
-    let activeFenceLayer = null;
-    let trackingLayer = null;
-    let appMode = 'edit';
-    let totalRouteDistanceMeters = 0;
+    let isSidebarExpanded = false;
+    function toggleSidebar() {
+      isSidebarExpanded = !isSidebarExpanded;
+      const sb = document.getElementById('mainSidebar');
+      const icon = document.getElementById('sidebarToggleIcon');
+      const texts = document.querySelectorAll('.sidebar-text');
+
+      if (isSidebarExpanded) {
+        sb.className = 'sidebar-expanded transition-all duration-300 bg-slate-900 border-r border-slate-800 flex flex-col justify-between z-40 shrink-0';
+        icon.className = 'fa-solid fa-chevron-left text-xs';
+        texts.forEach(t => t.classList.remove('hidden'));
+      } else {
+        sb.className = 'sidebar-collapsed transition-all duration-300 bg-slate-900 border-r border-slate-800 flex flex-col justify-between z-40 shrink-0';
+        icon.className = 'fa-solid fa-chevron-right text-xs';
+        texts.forEach(t => t.classList.add('hidden'));
+      }
+    }
+
+    let map = null, markersLayer = null, routeSegmentsLayer = null, trackingLayer = null, savedFencesLayer = null, activeFenceLayer = null;
+    let waypoints = [], currentFencePoints = [];
+    let appMode = 'edit', totalRouteDistanceMeters = 0;
 
     window.addEventListener('load', () => {
       initMap();
       fetchRoutesFromDatabase();
       loadFencesData();
-      startTrackingPolling();
+      setInterval(fetchActiveUsers, 5000);
     });
 
     function initMap() {
@@ -276,8 +251,8 @@
       appMode = mode;
       document.getElementById('editToolbar').classList.toggle('hidden', mode !== 'edit');
       document.getElementById('fenceToolbar').classList.toggle('hidden', mode !== 'fence');
-      document.getElementById('btnModeEdit').className = mode === 'edit' ? 'px-2.5 py-1.5 rounded-lg text-xs font-bold bg-brand-600 text-white' : 'px-2.5 py-1.5 rounded-lg text-xs font-bold text-slate-400';
-      document.getElementById('btnModeFence').className = mode === 'fence' ? 'px-2.5 py-1.5 rounded-lg text-xs font-bold bg-rose-600 text-white' : 'px-2.5 py-1.5 rounded-lg text-xs font-bold text-slate-400';
+      document.getElementById('navEditBtn').className = mode === 'edit' ? 'w-full flex items-center gap-3.5 px-3 py-2.5 rounded-xl bg-indigo-600 text-white font-semibold text-xs transition' : 'w-full flex items-center gap-3.5 px-3 py-2.5 rounded-xl text-slate-400 hover:bg-slate-800 font-semibold text-xs transition';
+      document.getElementById('navFenceBtn').className = mode === 'fence' ? 'w-full flex items-center gap-3.5 px-3 py-2.5 rounded-xl bg-rose-600 text-white font-semibold text-xs transition' : 'w-full flex items-center gap-3.5 px-3 py-2.5 rounded-xl text-slate-400 hover:bg-slate-800 font-semibold text-xs transition';
     }
 
     function refreshRouteVisuals() {
@@ -297,7 +272,7 @@
 
       waypoints.forEach((pt, i) => {
         const isStart = i === 0, isEnd = i === waypoints.length - 1 && waypoints.length > 1;
-        const bg = isStart ? 'bg-emerald-500' : (isEnd ? 'bg-rose-500' : 'bg-brand-600');
+        const bg = isStart ? 'bg-emerald-500' : (isEnd ? 'bg-rose-500' : 'bg-indigo-600');
         const icon = L.divIcon({ html: `<div class="custom-marker-pin ${bg}" style="width:26px;height:26px;font-size:11px;">${i + 1}</div>`, className: '', iconSize: [26, 26], iconAnchor: [13, 13] });
         L.marker([pt.lat, pt.lng], { icon, draggable: true }).on('drag', (e) => {
           pt.lat = e.target.getLatLng().lat;
@@ -316,51 +291,36 @@
 
     function undoLastWaypoint() { waypoints.pop(); refreshRouteVisuals(); }
     function clearCurrentRoute() { waypoints = []; refreshRouteVisuals(); }
+    function fitRouteBounds() { if (waypoints.length > 0) map.fitBounds(L.latLngBounds(waypoints.map(p => [p.lat, p.lng])), { padding: [50, 50] }); }
+    function findMyCurrentLocation() { navigator.geolocation.getCurrentPosition(p => map.setView([p.coords.latitude, p.coords.longitude], 16)); }
 
-    function fitRouteBounds() {
-      if (waypoints.length > 0) map.fitBounds(L.latLngBounds(waypoints.map(p => [p.lat, p.lng])), { padding: [50, 50] });
-    }
-
-    function findMyCurrentLocation() {
-      navigator.geolocation.getCurrentPosition(p => map.setView([p.coords.latitude, p.coords.longitude], 16));
-    }
-
-    // 💾 OPERAÇÕES COM A API NO RENDER (ROTAS)
-    function openSaveModal() {
-      if (waypoints.length < 2) { notify('Desenhe pelo menos 2 pontos!', 'warning'); return; }
-      document.getElementById('saveModal').classList.remove('hidden');
-    }
+    // API MULTI-TENANT (POR EMPRESA)
+    function openSaveModal() { if (waypoints.length >= 2) document.getElementById('saveModal').classList.remove('hidden'); }
     function closeSaveModal() { document.getElementById('saveModal').classList.add('hidden'); }
 
     async function confirmSaveRoute() {
       const name = document.getElementById('routeNameInput').value.trim() || 'Nova Rota';
-      try {
-        const res = await fetch(`${API_BASE_URL}/routes`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name, distance_meters: totalRouteDistanceMeters, waypoints })
-        });
-        if (!res.ok) throw new Error();
-        notify(`Rota "${name}" gravada com sucesso!`, 'success');
-        closeSaveModal();
-        waypoints = [];
-        refreshRouteVisuals();
-        fetchRoutesFromDatabase();
-      } catch (e) {
-        notify('Erro ao gravar rota no banco.', 'danger');
-      }
+      await fetch(`${API_BASE_URL}/routes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ company_id: sessionUser.company_id, name, distance_meters: totalRouteDistanceMeters, waypoints })
+      });
+      closeSaveModal();
+      waypoints = [];
+      refreshRouteVisuals();
+      fetchRoutesFromDatabase();
     }
 
     async function fetchRoutesFromDatabase() {
       try {
-        const res = await fetch(`${API_BASE_URL}/routes`);
+        const res = await fetch(`${API_BASE_URL}/routes?company_id=${sessionUser.company_id}`);
         const data = await res.json();
         const c = document.getElementById('savedRoutesContainer');
         c.innerHTML = data.map(item => `
           <div class="bg-slate-800 p-2.5 rounded-xl border border-slate-700 flex items-center justify-between">
             <div>
               <p class="font-bold text-white text-xs">${item.name}</p>
-              <p class="text-[10px] text-slate-400">${(item.distance_meters / 1000).toFixed(2)} km • ${item.waypoints.length} pts</p>
+              <p class="text-[10px] text-slate-400">${(item.distance_meters / 1000).toFixed(2)} km</p>
             </div>
             <div class="flex gap-1">
               <button onclick='loadRoute(${JSON.stringify(item.waypoints)})' class="w-7 h-7 bg-indigo-600/30 text-indigo-300 rounded-lg"><i class="fa-solid fa-download text-xs"></i></button>
@@ -371,34 +331,18 @@
       } catch (e) {}
     }
 
-    function loadRoute(pts) {
-      waypoints = pts;
-      refreshRouteVisuals();
-      fitRouteBounds();
-      toggleRouteManagerModal();
-    }
-
-    async function deleteRoute(id) {
-      if (!confirm('Eliminar esta rota da base de dados?')) return;
-      await fetch(`${API_BASE_URL}/routes/${id}`, { method: 'DELETE' });
-      fetchRoutesFromDatabase();
-    }
-
+    function loadRoute(pts) { waypoints = pts; refreshRouteVisuals(); fitRouteBounds(); toggleRouteManagerModal(); }
+    async function deleteRoute(id) { if (confirm('Eliminar rota?')) { await fetch(`${API_BASE_URL}/routes/${id}`, { method: 'DELETE' }); fetchRoutesFromDatabase(); } }
     function toggleRouteManagerModal() { document.getElementById('routeManagerModal').classList.toggle('hidden'); }
 
-    // 🛑 OPERAÇÕES DE CERCAS
+    // Cercas
     function refreshActiveFenceVisuals() {
       activeFenceLayer.clearLayers();
       document.getElementById('fencePointsCount').innerText = `${currentFencePoints.length} vértices`;
-      if (currentFencePoints.length >= 3) {
-        L.polygon(currentFencePoints.map(p => [p.lat, p.lng]), { color: '#ef4444', fillOpacity: 0.3 }).addTo(activeFenceLayer);
-      }
+      if (currentFencePoints.length >= 3) L.polygon(currentFencePoints.map(p => [p.lat, p.lng]), { color: '#ef4444', fillOpacity: 0.3 }).addTo(activeFenceLayer);
     }
     function clearCurrentFenceDraft() { currentFencePoints = []; refreshActiveFenceVisuals(); }
-    function openSaveFenceModal() {
-      if (currentFencePoints.length < 3) { notify('Necessita de pelo menos 3 vértices!', 'warning'); return; }
-      document.getElementById('saveFenceModal').classList.remove('hidden');
-    }
+    function openSaveFenceModal() { if (currentFencePoints.length >= 3) document.getElementById('saveFenceModal').classList.remove('hidden'); }
     function closeSaveFenceModal() { document.getElementById('saveFenceModal').classList.add('hidden'); }
 
     async function confirmSaveFence() {
@@ -407,25 +351,22 @@
       await fetch(`${API_BASE_URL}/fences`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, speed_limit_kmh: speed, points: currentFencePoints })
+        body: JSON.stringify({ company_id: sessionUser.company_id, name, speed_limit_kmh: speed, points: currentFencePoints })
       });
       closeSaveFenceModal();
       clearCurrentFenceDraft();
       loadFencesData();
-      notify('Cerca guardada!', 'success');
     }
 
     async function loadFencesData() {
-      const res = await fetch(`${API_BASE_URL}/fences`);
+      const res = await fetch(`${API_BASE_URL}/fences?company_id=${sessionUser.company_id}`);
       if (!res.ok) return;
-      fences = await res.json();
+      const fences = await res.json();
       savedFencesLayer.clearLayers();
-      fences.forEach(f => {
-        L.polygon(f.points.map(p => [p.lat, p.lng]), { color: '#ef4444', fillOpacity: 0.25 }).addTo(savedFencesLayer);
-      });
+      fences.forEach(f => L.polygon(f.points.map(p => [p.lat, p.lng]), { color: '#ef4444', fillOpacity: 0.25 }).addTo(savedFencesLayer));
     }
 
-    // 📡 TELEMETRIA & MONITORIZAÇÃO EM TEMPO REAL
+    // Telemetria isolada da Empresa
     function toggleTrackingModal() {
       const m = document.getElementById('trackingModal');
       m.classList.toggle('hidden');
@@ -434,65 +375,41 @@
 
     async function fetchActiveUsers() {
       try {
-        const res = await fetch(`${API_BASE_URL}/telemetry/active`);
+        const res = await fetch(`${API_BASE_URL}/telemetry/active?company_id=${sessionUser.company_id}`);
         if (!res.ok) return;
         const users = await res.json();
-        renderTrackingMarkers(users);
-        renderTrackingList(users);
-      } catch (e) {}
-    }
-
-    function renderTrackingMarkers(users) {
-      trackingLayer.clearLayers();
-      users.forEach(u => {
-        const isOnline = u.seconds_ago < 60;
-        const markerHtml = `
-          <div class="flex flex-col items-center">
-            <span class="px-2 py-0.5 rounded-full ${isOnline ? 'bg-emerald-600' : 'bg-slate-700'} text-white text-[9px] font-black shadow-md border border-white">
-              ${u.name.split(' ')[0]} (${u.speed_kmh} km/h)
-            </span>
-            <div class="w-8 h-8 rounded-full ${isOnline ? 'bg-amber-500' : 'bg-slate-600'} text-slate-950 flex items-center justify-center text-xs font-bold shadow-lg border-2 border-white mt-0.5">
-              <i class="fa-solid fa-truck"></i>
+        trackingLayer.clearLayers();
+        users.forEach(u => {
+          const isOnline = u.seconds_ago < 60;
+          const html = `
+            <div class="flex flex-col items-center">
+              <span class="px-2 py-0.5 rounded-full ${isOnline ? 'bg-emerald-600' : 'bg-slate-700'} text-white text-[9px] font-black border border-white">
+                ${u.name.split(' ')[0]} (${u.speed_kmh} km/h)
+              </span>
+              <div class="w-8 h-8 rounded-full ${isOnline ? 'bg-amber-500' : 'bg-slate-600'} text-slate-950 flex items-center justify-center text-xs font-bold shadow-lg border-2 border-white mt-0.5">
+                <i class="fa-solid fa-truck"></i>
+              </div>
             </div>
+          `;
+          L.marker([u.latitude, u.longitude], { icon: L.divIcon({ html, iconSize: [90, 50], iconAnchor: [45, 50] }) })
+            .bindPopup(`<b>${u.name}</b><br>Velocidade: ${u.speed_kmh} km/h<br>Sinal: há ${Math.round(u.seconds_ago)}s`)
+            .addTo(trackingLayer);
+        });
+
+        const c = document.getElementById('connectedUsersContainer');
+        if (!users.length) { c.innerHTML = '<p class="text-slate-500 text-center py-4">Nenhum veículo ativo nesta organização.</p>'; return; }
+        c.innerHTML = users.map(u => `
+          <div class="p-2.5 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-between">
+            <div>
+              <p class="font-bold text-white text-xs">${u.name}</p>
+              <p class="text-[10px] text-slate-400">${u.speed_kmh} km/h • há ${Math.round(u.seconds_ago)}s</p>
+            </div>
+            <button onclick="map.setView([${u.latitude}, ${u.longitude}], 16); toggleTrackingModal();" class="px-2.5 py-1 rounded-lg bg-indigo-600 text-white font-bold text-[10px]">
+              Focar
+            </button>
           </div>
-        `;
-        const icon = L.divIcon({ html: markerHtml, className: '', iconSize: [90, 50], iconAnchor: [45, 50] });
-        L.marker([u.latitude, u.longitude], { icon })
-          .bindPopup(`<b>${u.name}</b><br>Função: ${u.role}<br>Velocidade: ${u.speed_kmh} km/h<br>Último sinal: há ${Math.round(u.seconds_ago)}s`)
-          .addTo(trackingLayer);
-      });
-    }
-
-    function renderTrackingList(users) {
-      const c = document.getElementById('connectedUsersContainer');
-      if (!users.length) { c.innerHTML = '<p class="text-slate-500 text-center py-4">Nenhum utilizador ativo nos últimos 15 min.</p>'; return; }
-      c.innerHTML = users.map(u => `
-        <div class="p-2.5 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-between">
-          <div>
-            <p class="font-bold text-white text-xs">${u.name} <span class="text-[9px] text-indigo-400">(@${u.username})</span></p>
-            <p class="text-[10px] text-slate-400">${u.speed_kmh} km/h • há ${Math.round(u.seconds_ago)}s</p>
-          </div>
-          <button onclick="map.setView([${u.latitude}, ${u.longitude}], 16); toggleTrackingModal();" class="px-2.5 py-1 rounded-lg bg-indigo-600 text-white font-bold text-[10px]">
-            Focar
-          </button>
-        </div>
-      `).join('');
-    }
-
-    function startTrackingPolling() {
-      fetchActiveUsers();
-      setInterval(fetchActiveUsers, 5000); // Consulta atualizações a cada 5 segundos
-    }
-
-    function notify(text, type = 'info') {
-      const t = document.getElementById('toastNotification');
-      document.getElementById('toastMessage').innerText = text;
-      t.classList.remove('opacity-0', 'pointer-events-none', '-translate-y-4');
-      t.classList.add('opacity-100', 'translate-y-0');
-      setTimeout(() => {
-        t.classList.add('opacity-0', 'pointer-events-none', '-translate-y-4');
-        t.classList.remove('opacity-100', 'translate-y-0');
-      }, 3000);
+        `).join('');
+      } catch (e) {}
     }
   </script>
 </body>
