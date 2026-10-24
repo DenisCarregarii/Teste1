@@ -18,56 +18,108 @@
         <i class="fa-solid fa-truck-moving"></i>
       </div>
       <h1 class="text-xl font-black text-white">GeoNav Enterprise</h1>
-      <p class="text-xs text-slate-400">Selecione a sua organização e inicie sessão</p>
+      <p class="text-xs text-slate-400">Selecione a empresa e o veículo de frota</p>
     </div>
 
-    <form id="loginForm" onsubmit="handleLogin(event)" class="space-y-4">
+    <form id="loginForm" onsubmit="handleLogin(event)" class="space-y-3.5">
+      <!-- 1. SELETOR DE EMPRESA -->
       <div>
-        <label class="text-xs font-semibold text-slate-400 block mb-1">Empresa / Organização</label>
-        <select id="companySelect" required class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500">
-          <option value="">A carregar empresas...</option>
+        <label class="text-xs font-semibold text-slate-400 block mb-1">Empresa</label>
+        <select id="companySelect" required onchange="updateFleetOptions()" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500 cursor-pointer">
+          <option value="1">Alpha</option>
+          <option value="2">Beta</option>
+          <option value="3">Omega</option>
         </select>
       </div>
 
-      <div>
-        <label class="text-xs font-semibold text-slate-400 block mb-1">Utilizador</label>
-        <input id="userInput" type="text" required placeholder="admin_alpha ou motorista_alpha" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500">
+      <!-- 2. SELETOR DE NÚMERO DE FROTA -->
+      <div id="fleetContainer">
+        <label class="text-xs font-semibold text-slate-400 block mb-1 flex items-center justify-between">
+          <span>Veículo / Frota</span>
+          <span class="text-[10px] text-amber-400 font-mono" id="fleetHint"></span>
+        </label>
+        <select id="fleetSelect" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500 cursor-pointer">
+          <!-- preenchido dinamicamente via JavaScript -->
+        </select>
       </div>
 
+      <!-- 3. USUÁRIO -->
       <div>
-        <label class="text-xs font-semibold text-slate-400 block mb-1">Palavra-passe</label>
-        <input id="passInput" type="password" required placeholder="••••••••" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500">
+        <label class="text-xs font-semibold text-slate-400 block mb-1">Usuário</label>
+        <input id="userInput" type="text" required placeholder="admin ou motorista" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500">
       </div>
 
-      <button id="btnSubmit" type="submit" class="w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 font-bold text-sm text-white shadow-lg transition active:scale-95">
+      <!-- 4. SENHA -->
+      <div>
+        <label class="text-xs font-semibold text-slate-400 block mb-1">Senha</label>
+        <input id="passInput" type="password" required placeholder="••••" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500">
+      </div>
+
+      <button id="btnSubmit" type="submit" class="w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 font-bold text-sm text-white shadow-lg transition active:scale-95 mt-1">
         Entrar
       </button>
 
       <div id="loginMsg" class="hidden text-center text-xs text-rose-400 font-semibold p-2 rounded-lg bg-rose-500/10 border border-rose-500/20"></div>
     </form>
     
-    <div class="text-[11px] text-slate-400 border-t border-slate-800 pt-3 flex flex-col gap-1">
-      <span class="font-bold text-slate-300">Acessos de Teste (Senha: 123456):</span>
-      <div>Alpha: <code class="text-indigo-400">admin_alpha</code> (Editor) | <code class="text-emerald-400">motorista_alpha</code></div>
-      <div>TransGlobal: <code class="text-indigo-400">admin_beta</code> (Editor) | <code class="text-emerald-400">motorista_beta</code></div>
+    <!-- INFORMAÇÕES DE TESTE -->
+    <div class="text-[11px] text-slate-400 border-t border-slate-800 pt-3 flex flex-col gap-1.5">
+      <span class="font-bold text-slate-300">Acessos Padrão (Senha: 1234):</span>
+      <div class="flex justify-between items-center bg-slate-800/60 p-2 rounded-lg border border-slate-700/50">
+        <div>
+          <span class="font-bold text-white block">Editor (Gestor)</span>
+          <span class="text-slate-400">Usuário: <code class="text-indigo-400 font-bold">admin</code></span>
+        </div>
+        <div class="text-right">
+          <code class="text-white font-mono bg-slate-700 px-1.5 py-0.5 rounded">1234</code>
+        </div>
+      </div>
+      <div class="flex justify-between items-center bg-slate-800/60 p-2 rounded-lg border border-slate-700/50">
+        <div>
+          <span class="font-bold text-white block">Navegador (Motorista)</span>
+          <span class="text-slate-400">Usuário: <code class="text-emerald-400 font-bold">motorista</code></span>
+        </div>
+        <div class="text-right">
+          <code class="text-white font-mono bg-slate-700 px-1.5 py-0.5 rounded">1234</code>
+        </div>
+      </div>
     </div>
   </div>
 
   <script>
     const API_BASE_URL = 'https://teste1-p5pw.onrender.com/api';
 
+    // Lista de frotas por empresa solicitada
+    const FLEET_DATA = {
+      '1': ['1000', '1100', '1200', '1300', '1400', '1500', '1600'], // Alpha
+      '2': ['2000', '2100', '2200', '2300', '2400', '2500'],         // Beta
+      '3': ['3000', '3100', '3200', '3300', '3400', '3500']          // Omega
+    };
+
+    function updateFleetOptions() {
+      const compId = document.getElementById('companySelect').value;
+      const fleetSelect = document.getElementById('fleetSelect');
+      const fleets = FLEET_DATA[compId] || [];
+      
+      fleetSelect.innerHTML = fleets.map(f => `<option value="${f}">Veículo Frota ${f}</option>`).join('');
+    }
+
     window.addEventListener('load', async () => {
-      const sel = document.getElementById('companySelect');
+      // Atualiza frotas inicialmente
+      updateFleetOptions();
+
+      // Tenta sincronizar nomes do banco se houver
       try {
         const res = await fetch(`${API_BASE_URL}/companies`);
-        const companies = await res.json();
-        sel.innerHTML = companies.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
-      } catch (e) {
-        sel.innerHTML = `
-          <option value="1">Logística Alpha Express</option>
-          <option value="2">TransGlobal Frotas</option>
-        `;
-      }
+        if (res.ok) {
+          const companies = await res.json();
+          if (companies.length) {
+            const sel = document.getElementById('companySelect');
+            sel.innerHTML = companies.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+            updateFleetOptions();
+          }
+        }
+      } catch (e) {}
     });
 
     async function handleLogin(e) {
@@ -80,6 +132,7 @@
       btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> A verificar...';
 
       const company_id = document.getElementById('companySelect').value;
+      const fleet_num = document.getElementById('fleetSelect').value;
       const username = document.getElementById('userInput').value.trim();
       const password = document.getElementById('passInput').value.trim();
 
@@ -92,6 +145,12 @@
         const data = await res.json();
 
         if (res.ok && data.user) {
+          // Anexa o número da frota selecionado à sessão do usuário
+          data.user.fleet = fleet_num;
+          if (data.user.role === 'navegador') {
+            data.user.name = `Veículo ${fleet_num} (${data.user.company_name || 'Frota'})`;
+          }
+
           localStorage.setItem('geonav_session', JSON.stringify(data.user));
           if (data.user.role === 'editor') {
             window.location.href = 'index.html';
