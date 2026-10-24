@@ -3,13 +3,21 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>GeoNav Studio - Editor de Rotas & Velocidades</title>
+  <title>GeoNav Studio - Editor & Monitoramento</title>
 
+  <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Leaflet CSS & JS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+
+  <!-- Font Awesome -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+  <!-- Google Font Inter -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 
   <style>
@@ -19,7 +27,7 @@
     .no-scrollbar::-webkit-scrollbar { display: none; }
     .no-scrollbar { scrollbar-width: none; }
 
-    /* ---------- MENU LATERAL ---------- */
+    /* ---------- MENU LATERAL ESQUERDO ---------- */
     #mainSidebar { position: relative; display: flex; flex-direction: column; height: 100%; width: 68px; transition: width .3s ease; }
     #mainSidebar.expanded { width: 248px; }
     .sb-toggle {
@@ -54,6 +62,25 @@
     .chev { margin-left: auto; font-size: 10px; transition: transform .2s; }
     .chev.closed { transform: rotate(-90deg); }
 
+    /* ---------- PAINEL LATERAL DIREITO (MONITORAMENTO) ---------- */
+    #trackingSidebar {
+      position: absolute; top: 0; right: 0; height: 100%; width: 330px;
+      transform: translateX(100%); transition: transform .3s cubic-bezier(0.4, 0, 0.2, 1);
+      z-index: 45; display: flex; flex-direction: column;
+    }
+    #trackingSidebar.open { transform: translateX(0); }
+
+    /* ---------- PULSO DOS CAMINHÕES ONLINE ---------- */
+    .truck-sonar-wave {
+      position: absolute; width: 44px; height: 44px; border-radius: 9999px;
+      background: rgba(16, 185, 129, 0.35);
+      animation: truckSonar 2s cubic-bezier(0.2, 0, 0.4, 1) infinite;
+    }
+    @keyframes truckSonar {
+      0% { transform: scale(0.6); opacity: 0.9; }
+      100% { transform: scale(2.2); opacity: 0; }
+    }
+
     /* ---------- MARCADORES ---------- */
     .custom-marker-pin { display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 800; border-radius: 9999px; border: 2px solid #fff; box-shadow: 0 4px 10px rgba(0,0,0,0.45); }
     .mid-handle { width: 13px; height: 13px; border-radius: 9999px; background: rgba(255,255,255,.95); border: 2.5px solid #4f46e5; box-shadow: 0 2px 6px rgba(0,0,0,.4); cursor: pointer; }
@@ -63,7 +90,7 @@
     .fence-chip { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; background: rgba(15,23,42,.92); color: #fda4af; font-size: 10px; font-weight: 800; padding: 2px 8px; border-radius: 9999px; border: 1.5px solid #f43f5e; box-shadow: 0 2px 8px rgba(0,0,0,.5); cursor: pointer; }
     .sim-car { width: 34px; height: 34px; border-radius: 9999px; background: #f59e0b; border: 3px solid #fff; box-shadow: 0 4px 14px rgba(0,0,0,.6); display: flex; align-items: center; justify-content: center; color: #0f172a; }
 
-    /* ---------- TOOLTIPS E POPUPS ESTILIZADOS ---------- */
+    /* ---------- TOOLTIPS E POPUPS ---------- */
     .speed-tip.leaflet-tooltip { background: #0b1220; color: #fff; border: 1px solid #334155; border-radius: 14px; box-shadow: 0 10px 30px rgba(0,0,0,.55); padding: 8px 12px 8px 8px; font-family: 'Inter', sans-serif; font-size: 11px; line-height: 1.3; white-space: nowrap; }
     .speed-tip.leaflet-tooltip-top:before { border-top-color: #334155; }
     .tip-card { display: flex; align-items: center; gap: 10px; }
@@ -108,7 +135,7 @@
 
 <body class="bg-slate-950 text-slate-100 h-full w-full overflow-hidden flex antialiased">
 
-  <!-- 🍔 MENU LATERAL -->
+  <!-- 🍔 MENU LATERAL ESQUERDO -->
   <aside id="mainSidebar" class="bg-slate-900 border-r border-slate-800 z-40 shrink-0">
     <button class="sb-toggle" onclick="toggleSidebar()" title="Expandir / recolher menu">
       <i id="sidebarToggleIcon" class="fa-solid fa-chevron-right"></i>
@@ -155,7 +182,8 @@
         <span class="sidebar-text">Simulação</span>
       </button>
 
-      <button onclick="toggleTrackingModal()" title="Monitoramento em tempo real" class="nav-btn c-amber">
+      <!-- BOTÃO MONITORAMENTO: ABRE PAINEL LATERAL DIREITO E ESCONDE BARRAS DE BAIXO -->
+      <button onclick="toggleTrackingSidebar()" id="btnNavTracking" title="Monitoramento em tempo real" class="nav-btn c-amber">
         <i class="fa-solid fa-tower-broadcast nav-ico animate-pulse"></i>
         <span class="sidebar-text">Monitoramento</span>
       </button>
@@ -184,7 +212,7 @@
     <div id="map"></div>
 
     <!-- Canto superior esquerdo: banner da rota + legenda de velocidades -->
-    <div class="absolute top-4 left-4 right-16 z-20 flex flex-col gap-2 items-start pointer-events-none">
+    <div class="absolute top-4 left-4 right-20 z-20 flex flex-col gap-2 items-start pointer-events-none">
       <div id="editingRouteBanner" class="hidden pointer-events-auto bg-indigo-600/95 backdrop-blur-md border border-indigo-400/50 rounded-2xl px-4 py-2.5 items-center gap-3 shadow-2xl max-w-full flex-wrap">
         <div id="routeBannerDot" class="w-2.5 h-2.5 rounded-full bg-emerald-400 shrink-0"></div>
         <div class="text-xs min-w-0">
@@ -212,6 +240,9 @@
 
     <!-- Controles flutuantes à direita -->
     <div class="absolute right-3 top-4 flex flex-col gap-1.5 z-20">
+      <button onclick="toggleTrackingSidebar()" title="Abrir Lista de Monitoramento" class="w-10 h-10 rounded-xl bg-slate-900/90 text-amber-400 border border-slate-700/80 shadow flex items-center justify-center hover:bg-slate-800 transition">
+        <i class="fa-solid fa-tower-broadcast text-xs animate-pulse"></i>
+      </button>
       <button onclick="map.zoomIn()" class="w-10 h-10 rounded-xl bg-slate-900/90 text-slate-200 border border-slate-700/80 shadow flex items-center justify-center hover:bg-slate-800"><i class="fa-solid fa-plus text-xs"></i></button>
       <button onclick="map.zoomOut()" class="w-10 h-10 rounded-xl bg-slate-900/90 text-slate-200 border border-slate-700/80 shadow flex items-center justify-center hover:bg-slate-800"><i class="fa-solid fa-minus text-xs"></i></button>
       <button onclick="fitRouteBounds()" title="Enquadrar rota" class="w-10 h-10 rounded-xl bg-slate-900/90 text-slate-200 border border-slate-700/80 shadow flex items-center justify-center hover:bg-slate-800"><i class="fa-solid fa-expand text-xs"></i></button>
@@ -264,7 +295,7 @@
       </div>
     </div>
 
-    <!-- PAINEL INFERIOR: TRAÇADO E VELOCIDADE -->
+    <!-- PAINEL INFERIOR: TRAÇADO E VELOCIDADE (OCULTO AUTOMATICAMENTE EM MONITORAMENTO) -->
     <div id="editToolbar" class="absolute bottom-4 left-3 right-3 md:left-1/2 md:-translate-x-1/2 md:w-[860px] md:right-auto bg-slate-900/95 backdrop-blur-md rounded-2xl border border-slate-800 shadow-2xl p-3 z-20 flex flex-col lg:flex-row items-center justify-between gap-2.5">
       <div class="flex items-center gap-3 text-xs w-full lg:w-auto justify-between lg:justify-start">
         <span id="routePointsCount" class="font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-lg border border-emerald-500/20">0 pontos</span>
@@ -280,7 +311,7 @@
         <button id="btnClear" onclick="clearCurrentRoute(true)" title="Limpar mapa" class="tb-btn bg-rose-500/10 text-rose-300 hover:bg-rose-500/20 border-rose-500/30">
           <i class="fa-solid fa-trash-can"></i><span>Limpar</span>
         </button>
-        <button id="btnIndicator" onclick="toggleIndicatorPlacing()" title="Marcar indicação (curva, retorno, rotatória) na linha da rota" class="tb-btn bg-orange-600/20 text-orange-300 hover:bg-orange-600/30 border-orange-500/40">
+        <button id="btnIndicator" onclick="toggleIndicatorPlacing()" title="Marcar indicação na linha da rota" class="tb-btn bg-orange-600/20 text-orange-300 hover:bg-orange-600/30 border-orange-500/40">
           <i class="fa-solid fa-diamond-turn-right"></i><span>Indicação</span>
         </button>
         <button id="btnSimulate" onclick="openSimulation()" title="Simular a rota" class="tb-btn bg-sky-600/20 text-sky-300 hover:bg-sky-600/30 border-sky-500/40">
@@ -312,9 +343,69 @@
     </div>
   </main>
 
+  <!-- 📡 BARRA LATERAL DIREITA: MONITORAMENTO DE EQUIPAMENTOS EM TEMPO REAL -->
+  <aside id="trackingSidebar" class="bg-slate-900/95 backdrop-blur-md border-l border-slate-800 shadow-2xl">
+    <div class="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-900">
+      <div class="flex items-center gap-2.5">
+        <div class="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center justify-center text-sm shadow">
+          <i class="fa-solid fa-tower-broadcast animate-pulse"></i>
+        </div>
+        <div>
+          <h2 class="text-sm font-black text-white tracking-tight">Monitoramento</h2>
+          <p class="text-[10px] text-slate-400 font-semibold" id="trackingCompanyLabel">Equipamentos da Empresa</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-1.5">
+        <button onclick="fitEquipmentBounds()" title="Centralizar todos os equipamentos" class="w-8 h-8 rounded-xl bg-slate-800 text-amber-400 hover:text-white flex items-center justify-center transition hover:bg-slate-700">
+          <i class="fa-solid fa-expand text-xs"></i>
+        </button>
+        <button onclick="toggleTrackingSidebar()" class="w-8 h-8 rounded-xl bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center transition hover:bg-slate-700">
+          <i class="fa-solid fa-xmark text-sm"></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- Indicadores / Contadores -->
+    <div class="grid grid-cols-2 gap-2 p-3 border-b border-slate-800/80 bg-slate-950/40">
+      <div class="bg-slate-800/70 border border-emerald-500/30 rounded-xl p-2.5 flex items-center gap-2.5">
+        <span class="w-3 h-3 rounded-full bg-emerald-500 animate-ping"></span>
+        <div>
+          <div class="text-[10px] uppercase font-bold text-emerald-400 tracking-wider">Online</div>
+          <div class="text-lg font-black text-white" id="onlineCountBadge">0</div>
+        </div>
+      </div>
+      <div class="bg-slate-800/70 border border-slate-700/60 rounded-xl p-2.5 flex items-center gap-2.5">
+        <span class="w-3 h-3 rounded-full bg-slate-500"></span>
+        <div>
+          <div class="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Offline</div>
+          <div class="text-lg font-black text-white" id="offlineCountBadge">0</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Busca Rápida -->
+    <div class="p-3 border-b border-slate-800">
+      <div class="relative flex items-center bg-slate-800/90 rounded-xl border border-slate-700/80 px-3 py-1.5 focus-within:border-indigo-500">
+        <i class="fa-solid fa-magnifying-glass text-xs text-slate-400 mr-2"></i>
+        <input 
+          id="truckSearchInput" 
+          type="text" 
+          placeholder="Buscar por frota ou nome..." 
+          oninput="renderTrackingList()"
+          class="w-full bg-transparent text-xs text-white placeholder-slate-400 focus:outline-none"
+        >
+      </div>
+    </div>
+
+    <!-- Lista de Equipamentos -->
+    <div id="connectedUsersContainer" class="flex-1 overflow-y-auto p-3 space-y-2 no-scrollbar">
+      <p class="text-slate-400 text-center py-8 text-xs font-medium">Buscando sinal de equipamentos...</p>
+    </div>
+  </aside>
+
   <div id="toastBox" class="fixed top-4 left-1/2 -translate-x-1/2 z-[70] flex flex-col gap-2 items-center pointer-events-none w-[92vw] max-w-md"></div>
 
-  <!-- DIÁLOGO PRÓPRIO (substitui alert/confirm do navegador) -->
+  <!-- DIÁLOGO PRÓPRIO -->
   <div id="dialogModal" class="hidden fixed inset-0 bg-black/75 backdrop-blur-sm z-[80] flex items-center justify-center p-3">
     <div id="dialogBox" class="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden">
       <div class="p-5 flex gap-3.5">
@@ -331,7 +422,7 @@
     </div>
   </div>
 
-  <!-- MODAL: LIMITE DE VELOCIDADE DO TRECHO (PONTO A → PONTO B) -->
+  <!-- MODAL: LIMITE DE VELOCIDADE DO TRECHO -->
   <div id="speedModal" class="hidden fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-3">
     <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-xs p-5 flex flex-col gap-4 shadow-2xl">
       <div class="flex items-center justify-between border-b border-slate-800 pb-2">
@@ -413,20 +504,6 @@
     </div>
   </div>
 
-  <!-- MODAL: MONITORIZAÇÃO EM TEMPO REAL -->
-  <div id="trackingModal" class="hidden fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-3">
-    <div class="bg-slate-900 border border-amber-500/40 rounded-2xl w-full max-w-md shadow-2xl flex flex-col max-h-[80vh] overflow-hidden">
-      <div class="p-3.5 border-b border-slate-800 flex items-center justify-between">
-        <h3 class="font-bold text-sm text-white flex items-center gap-2">
-          <i class="fa-solid fa-tower-broadcast text-amber-400"></i>
-          Veículos ativos na organização
-        </h3>
-        <button onclick="toggleTrackingModal()" class="w-7 h-7 rounded-lg bg-slate-800 text-slate-400 flex items-center justify-center"><i class="fa-solid fa-xmark"></i></button>
-      </div>
-      <div id="connectedUsersContainer" class="p-3.5 overflow-y-auto space-y-2 text-xs no-scrollbar"></div>
-    </div>
-  </div>
-
   <!-- MODAL: GUARDAR / ATUALIZAR ROTA NO BANCO -->
   <div id="saveModal" class="hidden fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-3">
     <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-sm p-5 flex flex-col gap-3 shadow-2xl">
@@ -502,7 +579,10 @@
     try { sessionUser = JSON.parse(localStorage.getItem('geonav_session') || 'null'); } catch (e) {}
     const SESSION_OK = !!sessionUser && sessionUser.role === 'editor';
     if (!SESSION_OK) window.location.href = 'login.html';
-    if (SESSION_OK) $('companyBadge').innerText = sessionUser.company_name || 'Organização';
+    if (SESSION_OK) {
+      $('companyBadge').innerText = sessionUser.company_name || 'Organização';
+      $('trackingCompanyLabel').innerText = `Frota ativa: ${sessionUser.company_name || 'Organização'}`;
+    }
 
     function logout() {
       localStorage.removeItem('geonav_session');
@@ -526,7 +606,6 @@
       setTimeout(() => { el.style.transition = 'opacity .3s'; el.style.opacity = '0'; setTimeout(() => el.remove(), 320); }, ms);
     }
 
-    // Diálogos próprios (no lugar de alert/confirm do navegador)
     let dialogResolve = null;
     const DIALOG_THEME = {
       error:   { ico: 'fa-circle-exclamation', icoCls: 'bg-rose-500/15 text-rose-400', btn: 'bg-rose-600 hover:bg-rose-500', border: 'border-rose-500/40' },
@@ -586,7 +665,6 @@
       return inside;
     }
 
-    // Cor de cada limite de velocidade (cada limite = uma cor)
     const SPEED_STOPS = [[20, '#06b6d4'], [30, '#22c55e'], [40, '#84cc16'], [50, '#eab308'], [60, '#f97316'], [70, '#ef4444'], [80, '#ec4899'], [90, '#a855f7'], [100, '#6366f1'], [110, '#3b82f6']];
     function speedColor(v) {
       for (const [max, c] of SPEED_STOPS) if (v <= max) return c;
@@ -594,7 +672,7 @@
     }
 
     // ==========================================================
-    // 🍔 MENU LATERAL
+    // 🍔 MENU LATERAL ESQUERDO
     // ==========================================================
     let isSidebarExpanded = false;
     function toggleSidebar() {
@@ -622,6 +700,8 @@
     let speedPick = { start: null, end: null };
     let placingIndicator = false;
     let indIndex = null, indIsNew = false;
+    let currentActiveTrucks = [];
+    let hasAutoCenteredTracking = false;
 
     window.addEventListener('load', () => {
       if (!SESSION_OK) return;
@@ -631,11 +711,11 @@
       fetchRoutesFromDatabase();
       loadFencesData();
       fetchActiveUsers();
-      setInterval(fetchActiveUsers, 5000);
+      setInterval(fetchActiveUsers, 4000);
     });
 
     // ==========================================================
-    // 🛰️ MAPA E CAMADAS (MAPA / SATÉLITE / SATÉLITE + RUAS)
+    // 🛰️ MAPA E CAMADAS
     // ==========================================================
     const TILE = 'https://server.arcgisonline.com/ArcGIS/rest/services';
     let baseMode = 'hybrid';
@@ -698,8 +778,6 @@
       if (mode !== 'edit') setIndicatorPlacing(false);
       if (mode !== 'fence') { fenceAnchor = null; rubberLayer.clearLayers(); }
 
-      // 🧹 CONTROLE DE VISIBILIDADE DAS BARRAS INFERIORES:
-      // Se estiver em modo 'tracking' (Monitoramento), oculta TODAS as barras de baixo!
       const isDrawing = (mode === 'edit' || mode === 'speed');
       const isFence = (mode === 'fence');
       const isTracking = (mode === 'tracking');
@@ -708,7 +786,6 @@
       $('fenceToolbar').classList.toggle('hidden', !isFence);
       $('speedGuide').classList.toggle('hidden', mode !== 'speed');
 
-      // Controle do painel lateral direito de monitoramento
       isTrackingSidebarOpen = isTracking;
       $('trackingSidebar').classList.toggle('open', isTracking);
 
@@ -744,9 +821,10 @@
 
     function toggleTrackingSidebar() {
       if (appMode === 'tracking') {
-        setAppMode('edit'); // Sai do monitoramento e volta para o desenho
+        setAppMode('edit');
       } else {
-        setAppMode('tracking'); // Entra no monitoramento e oculta as barras de desenho
+        hasAutoCenteredTracking = false;
+        setAppMode('tracking');
       }
     }
 
@@ -767,7 +845,7 @@
     }
 
     // ==========================================================
-    // 🎨 RENDERIZAÇÃO DA ROTA (TRECHOS COLORIDOS POR LIMITE)
+    // 🎨 RENDERIZAÇÃO DA ROTA
     // ==========================================================
     function projectOnRoute(latlng) {
       if (waypoints.length < 2) return null;
@@ -790,7 +868,6 @@
       return pr.c.distanceTo(pr.a) <= pr.c.distanceTo(pr.b) ? pr.i : pr.i + 1;
     }
 
-    // Só valem indicações marcadas à mão (L, R, U, O1..O6). Valores antigos como 'auto' ou 'X' são ignorados.
     const isManeuver = c => c === 'L' || c === 'R' || c === 'U' || /^O[1-6]$/.test(c || '');
 
     function maneuverIconHtml(code) {
@@ -818,7 +895,6 @@
         totalM += segDist[i];
       }
 
-      // trechos consecutivos com o mesmo limite/pavimento viram UM trecho colorido
       const runs = [];
       for (let i = 0; i < n - 1; i++) {
         const w = waypoints[i];
@@ -828,7 +904,6 @@
         else runs.push({ a: i, b: i + 1, limit, type, dist: segDist[i] });
       }
 
-      // destaque do intervalo escolhido no modo velocidade
       if (speedPick.start !== null && speedPick.end !== null) {
         const a = Math.min(speedPick.start, speedPick.end), b = Math.max(speedPick.start, speedPick.end);
         L.polyline(waypoints.slice(a, b + 1).map(p => [p.lat, p.lng]), { color: '#ffffff', weight: 14, opacity: 0.95, interactive: false }).addTo(selectionLayer);
@@ -864,7 +939,6 @@
         });
       });
 
-      // pontinhos do meio para criar curvas
       if (canEdit) {
         for (let i = 0; i < n - 1; i++) {
           const p1 = waypoints[i], p2 = waypoints[i + 1];
@@ -883,7 +957,6 @@
       $('routePointsCount').innerText = `${n} pontos`;
       $('routeTotalDistance').innerText = fmtDist(totalM);
 
-      // marcadores dos pontos
       waypoints.forEach((pt, i) => {
         const isStart = i === 0, isEnd = i === n - 1 && n > 1;
         let bg = isStart ? 'bg-emerald-500' : (isEnd ? 'bg-rose-500' : 'bg-indigo-600');
@@ -949,7 +1022,7 @@
     }
 
     // ==========================================================
-    // 🚦 LIMITE DE VELOCIDADE: DE UM PONTO A OUTRO
+    // 🚦 LIMITE DE VELOCIDADE
     // ==========================================================
     function updateSpeedGuide() {
       const t = $('speedGuideTitle'), s = $('speedGuideSub'), c = $('speedGuideCancel');
@@ -1034,7 +1107,7 @@
     }
 
     // ==========================================================
-    // 🧭 INDICAÇÕES MANUAIS (CURVA, RETORNO, ROTATÓRIA)
+    // 🧭 INDICAÇÕES MANUAIS
     // ==========================================================
     function maneuverText(code) {
       if (code && code[0] === 'O') return `Na rotatória, pegue a ${ORD[Number(code[1])] || code[1] + 'ª'} saída`;
@@ -1226,7 +1299,6 @@
       btn.disabled = true;
       labelEl.innerText = 'A processar...';
 
-      // envia JSON e devolve sempre {ok, status, data, text} (sem lançar erro)
       const send = async (method, url, payload) => {
         try {
           const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: payload ? JSON.stringify(payload) : undefined });
@@ -1247,7 +1319,6 @@
         const payload = { company_id: sessionUser.company_id, name, distance_meters: totalRouteDistanceMeters, waypoints };
         let r = await send(isUpdate ? 'PUT' : 'POST', isUpdate ? `${API_BASE_URL}/routes/${editingRouteId}` : `${API_BASE_URL}/routes`, payload);
 
-        // Plano B: se o servidor recusar o PUT (ex.: rota de atualização inexistente), grava como nova e remove a antiga
         if (isUpdate && !r.ok && r.status !== 0 && r.status !== 401 && r.status !== 403) {
           const putErr = why(r);
           const created = await send('POST', `${API_BASE_URL}/routes`, payload);
@@ -1267,7 +1338,6 @@
 
         closeSaveModal();
         notify(isUpdate ? `Rota "${name}" atualizada!` : `Rota "${name}" guardada!`, 'success');
-        // rota salva: limpa o mapa para começar uma nova
         clearCurrentRoute(false);
         await fetchRoutesFromDatabase();
       } finally {
@@ -1342,7 +1412,7 @@
     }
 
     // ==========================================================
-    // 🛑 CERCAS VIRTUAIS (POLÍGONO / RETÂNGULO / CÍRCULO, EDITÁVEIS)
+    // 🛑 CERCAS VIRTUAIS
     // ==========================================================
     let fenceTool = 'poly';
     let fenceDraft = { points: [], closed: false, editingId: null };
@@ -1353,7 +1423,6 @@
       fenceTool = t;
       fenceAnchor = null;
       rubberLayer.clearLayers();
-      // trocar de ferramenta recomeça o desenho, a menos que esteja editando uma cerca salva
       if (!fenceDraft.editingId) { fenceDraft.points = []; fenceDraft.closed = false; }
       ['poly', 'rect', 'circle'].forEach(k => $('tool' + k.charAt(0).toUpperCase() + k.slice(1)).classList.toggle('sel', k === t));
       refreshActiveFenceVisuals();
@@ -1428,7 +1497,6 @@
       if (n >= 3) poly = L.polygon(latlngs, { color: '#f43f5e', weight: 3, fillColor: '#f43f5e', fillOpacity: 0.28, dashArray: fenceDraft.closed ? null : '6 6', interactive: false }).addTo(activeFenceLayer);
       else if (n === 2) L.polyline(latlngs, { color: '#f43f5e', weight: 3, interactive: false }).addTo(activeFenceLayer);
 
-      // pontos do meio das arestas (inserem vértices)
       if (n >= 2) {
         const edges = n >= 3 ? n : n - 1;
         for (let j = 0; j < edges; j++) {
@@ -1598,7 +1666,6 @@
       for (let i = 1; i < n; i++) sim.s[i] = sim.s[i - 1] + distanceInMeters(waypoints[i - 1].lat, waypoints[i - 1].lng, waypoints[i].lat, waypoints[i].lng);
       sim.total = sim.s[n - 1] || 0;
       sim.events = [];
-      // somente indicações marcadas manualmente
       for (let i = 0; i < n - 1; i++) {
         const code = waypoints[i].maneuver;
         if (!isManeuver(code)) continue;
@@ -1720,14 +1787,12 @@
       sim.speed += (target - sim.speed) * Math.min(1, dt * 2.2);
       sim.dist = Math.min(sim.total, sim.dist + (sim.speed / 3.6) * dt * sim.factor);
 
-      // avisos por voz (200 m e 50 m antes da manobra)
       if (next) {
         const remain = next.at - sim.dist;
         if (remain <= 50 && !sim.said.has(next.idx + ':50')) { sim.said.add(next.idx + ':50'); sim.said.add(next.idx + ':200'); simSpeak(`Em 50 metros, ${lcFirst(next.text)}`); }
         else if (remain <= 200 && !sim.said.has(next.idx + ':200')) { sim.said.add(next.idx + ':200'); simSpeak(`Em 200 metros, ${lcFirst(next.text)}`); }
       }
 
-      // veículo no mapa
       const brg = calculateBearing(waypoints[seg].lat, waypoints[seg].lng, waypoints[seg + 1].lat, waypoints[seg + 1].lng);
       const html = `<div class="sim-car"><i class="fa-solid fa-arrow-up" style="transform:rotate(${brg}deg)"></i></div>`;
       if (!sim.marker) {
@@ -1739,7 +1804,6 @@
       }
       if (sim.follow && !map.getBounds().pad(-0.3).contains([pos.lat, pos.lng])) map.panTo([pos.lat, pos.lng], { animate: false });
 
-      // painel
       $('simSpeed').innerText = Math.round(sim.speed);
       const sign = $('simLimitSign');
       sign.innerText = effLimit;
@@ -1773,7 +1837,7 @@
       sim.raf = requestAnimationFrame(simTick);
     }
 
-        // ==========================================================
+    // ==========================================================
     // 📡 TELEMETRIA MULTI-EMPRESA & MONITORAMENTO EM TEMPO REAL
     // ==========================================================
     let isTrackingSidebarOpen = false;
@@ -1792,7 +1856,7 @@
       if (appMode === 'tracking') {
         setAppMode('edit');
       } else {
-        hasAutoCenteredTracking = false; // Permite re-enquadrar ao abrir
+        hasAutoCenteredTracking = false;
         setAppMode('tracking');
       }
     }
@@ -1807,7 +1871,7 @@
         renderTrackingMarkers();
         renderTrackingList();
 
-        // Foco automático nos caminhões da empresa ao abrir o monitoramento
+        // Enquadramento automático dos caminhões da empresa ao abrir o monitoramento
         if (appMode === 'tracking' && !hasAutoCenteredTracking && users.length > 0) {
           fitEquipmentBounds(false);
           hasAutoCenteredTracking = true;
@@ -1823,7 +1887,7 @@
         const fleetNum = extractFleetNumber(u);
         const heading = u.heading || 0;
 
-        // 🏷️ PLACA COM SOMENTE O NÚMERO DA FROTA EM CIMA + CAMINHÃO VERDE (ONLINE) / CINZA (OFFLINE)
+        // Placa com APENAS O NÚMERO DA FROTA + caminhão verde (online) ou cinza (offline)
         const markerHtml = `
           <div class="relative flex flex-col items-center select-none" style="transform: translate(-50%, -100%);">
             <!-- NÚMERO DA FROTA EM DESTAQUE -->
