@@ -1773,13 +1773,28 @@
       sim.raf = requestAnimationFrame(simTick);
     }
 
+        // ==========================================================
+    // 📡 TELEMETRIA MULTI-EMPRESA & MONITORAMENTO EM TEMPO REAL
     // ==========================================================
-    // 📡 TELEMETRIA MULTI-EMPRESA
-    // ==========================================================
-    function toggleTrackingModal() {
-      const m = $('trackingModal');
-      m.classList.toggle('hidden');
-      if (!m.classList.contains('hidden')) fetchActiveUsers();
+    let isTrackingSidebarOpen = false;
+    let currentActiveTrucks = [];
+    let hasAutoCenteredTracking = false;
+
+    function extractFleetNumber(u) {
+      if (u.fleet && String(u.fleet).trim()) return String(u.fleet).trim();
+      const m = String(u.name || '').match(/(\d{3,5})/);
+      if (m) return m[1];
+      if (u.username && u.username !== 'motorista') return u.username;
+      return 'Frota';
+    }
+
+    function toggleTrackingSidebar() {
+      if (appMode === 'tracking') {
+        setAppMode('edit');
+      } else {
+        hasAutoCenteredTracking = false; // Permite re-enquadrar ao abrir
+        setAppMode('tracking');
+      }
     }
 
     async function fetchActiveUsers() {
@@ -1788,44 +1803,144 @@
         if (!res.ok) return;
         const users = await res.json();
         if (!Array.isArray(users)) return;
-        trackingLayer.clearLayers();
-        users.forEach(u => {
-          const isOnline = u.seconds_ago < 60;
-          const html = `
-            <div class="flex flex-col items-center">
-              <span class="px-2 py-0.5 rounded-full ${isOnline ? 'bg-emerald-600' : 'bg-slate-700'} text-white text-[9px] font-black border border-white whitespace-nowrap">
-                ${esc(String(u.name || '').split(' ')[0])} (${esc(u.speed_kmh)} km/h)
-              </span>
-              <div class="w-8 h-8 rounded-full ${isOnline ? 'bg-amber-500' : 'bg-slate-600'} text-slate-950 flex items-center justify-center text-xs font-bold shadow-lg border-2 border-white mt-0.5">
-                <i class="fa-solid fa-truck"></i>
+        currentActiveTrucks = users;
+        renderTrackingMarkers();
+        renderTrackingList();
+
+        // Foco automático nos caminhões da empresa ao abrir o monitoramento
+        if (appMode === 'tracking' && !hasAutoCenteredTracking && users.length > 0) {
+          fitEquipmentBounds(false);
+          hasAutoCenteredTracking = true;
+        }
+      } catch (e) {}
+    }
+
+    function renderTrackingMarkers() {
+      trackingLayer.clearLayers();
+
+      currentActiveTrucks.forEach(u => {
+        const isOnline = u.seconds_ago < 60;
+        const fleetNum = extractFleetNumber(u);
+        const heading = u.heading || 0;
+
+        // 🏷️ PLACA COM SOMENTE O NÚMERO DA FROTA EM CIMA + CAMINHÃO VERDE (ONLINE) / CINZA (OFFLINE)
+        const markerHtml = `
+          <div class="relative flex flex-col items-center select-none" style="transform: translate(-50%, -100%);">
+            <!-- NÚMERO DA FROTA EM DESTAQUE -->
+            <div class="px-2.5 py-0.5 rounded-full ${isOnline ? 'bg-emerald-600 text-white border-white ring-2 ring-emerald-500/40' : 'bg-slate-700 text-slate-200 border-slate-400'} text-[11px] font-black shadow-2xl border-2 whitespace-nowrap mb-1 flex items-center justify-center">
+              <span>${esc(fleetNum)}</span>
+            </div>
+
+            <!-- ÍCONE DO CAMINHÃO -->
+            <div class="relative flex items-center justify-center">
+              ${isOnline ? '<div class="truck-sonar-wave"></div>' : ''}
+              <div class="w-8 h-8 rounded-full ${isOnline ? 'bg-emerald-500 border-white text-white' : 'bg-slate-600 border-slate-400 text-slate-300'} border-2 shadow-2xl flex items-center justify-center text-xs z-10 transition-transform">
+                <i class="fa-solid fa-truck" style="transform: rotate(${isOnline && u.speed_kmh > 2 ? heading : 0}deg);"></i>
               </div>
             </div>
-          `;
-          L.marker([u.latitude, u.longitude], { icon: L.divIcon({ html, className: '', iconSize: [90, 50], iconAnchor: [45, 50] }) })
-            .bindPopup(
-              `<div class="pop-head"><div class="tip-ico" style="background:rgba(245,158,11,.18);color:#fbbf24"><i class="fa-solid fa-truck"></i></div>` +
-              `<div class="min-w-0"><div class="tip-title">${esc(u.name)}</div><div class="tip-sub">${isOnline ? 'Veículo ativo' : 'Sem sinal recente'}</div></div></div>` +
-              `<div class="pop-body"><div class="pop-row">Velocidade<b>${esc(u.speed_kmh)} km/h</b></div>` +
-              `<div class="pop-row">Último sinal<span class="chip ${isOnline ? 'emerald' : ''}"><span class="dot" style="background:${isOnline ? '#34d399' : '#64748b'}"></span>há ${Math.round(u.seconds_ago)}s</span></div></div>`,
-              { closeButton: true, minWidth: 220 }
-            )
-            .addTo(trackingLayer);
-        });
+          </div>
+        `;
 
-        const c = $('connectedUsersContainer');
-        if (!users.length) { c.innerHTML = '<p class="text-slate-500 text-center py-4">Nenhum veículo ativo nesta organização.</p>'; return; }
-        c.innerHTML = users.map(u => `
-          <div class="p-2.5 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-between">
-            <div>
-              <p class="font-bold text-white text-xs">${esc(u.name)}</p>
-              <p class="text-[10px] text-slate-400">${esc(u.speed_kmh)} km/h • há ${Math.round(u.seconds_ago)}s</p>
+        const icon = L.divIcon({ html: markerHtml, className: '', iconSize: [0, 0] });
+        
+        L.marker([u.latitude, u.longitude], { icon, zIndexOffset: isOnline ? 900 : 400 })
+          .bindPopup(
+            `<div class="pop-head"><div class="tip-ico" style="background:${isOnline ? 'rgba(16,185,129,.18)' : 'rgba(100,116,139,.18)'};color:${isOnline ? '#34d399' : '#94a3b8'}"><i class="fa-solid fa-truck"></i></div>` +
+            `<div class="min-w-0"><div class="tip-title">Veículo Frota ${esc(fleetNum)}</div><div class="tip-sub">${esc(u.name || 'Operacional')}</div></div></div>` +
+            `<div class="pop-body">` +
+            `<div class="pop-row">Status<span class="chip ${isOnline ? 'emerald' : ''}"><span class="dot" style="background:${isOnline ? '#34d399' : '#64748b'}"></span>${isOnline ? 'Online (Conectado)' : 'Offline (Sem sinal)'}</span></div>` +
+            `<div class="pop-row">Velocidade<b>${esc(u.speed_kmh)} km/h</b></div>` +
+            `<div class="pop-row">Última atualização<span class="text-slate-300 font-semibold">há ${Math.round(u.seconds_ago)}s</span></div>` +
+            `</div>` +
+            `<div class="pop-actions"><button class="pop-btn" style="background:#4f46e5" onclick="focusTruckOnMap(${Number(u.latitude)}, ${Number(u.longitude)})"><i class="fa-solid fa-crosshairs"></i>Centralizar</button></div>`,
+            { closeButton: true, minWidth: 220 }
+          )
+          .addTo(trackingLayer);
+      });
+    }
+
+    function renderTrackingList() {
+      const c = $('connectedUsersContainer');
+      const search = ($('truckSearchInput') ? $('truckSearchInput').value : '').trim().toLowerCase();
+
+      let onCount = 0, offCount = 0;
+      currentActiveTrucks.forEach(u => {
+        if (u.seconds_ago < 60) onCount++; else offCount++;
+      });
+      if ($('onlineCountBadge')) $('onlineCountBadge').innerText = onCount;
+      if ($('offlineCountBadge')) $('offlineCountBadge').innerText = offCount;
+
+      const filtered = currentActiveTrucks.filter(u => {
+        const f = extractFleetNumber(u).toLowerCase();
+        const n = String(u.name || '').toLowerCase();
+        return f.includes(search) || n.includes(search);
+      });
+
+      if (!filtered.length) {
+        c.innerHTML = '<p class="text-slate-500 text-center py-8 text-xs font-medium">Nenhum equipamento conectado nesta empresa.</p>';
+        return;
+      }
+
+      filtered.sort((a, b) => {
+        const aOn = a.seconds_ago < 60 ? 1 : 0;
+        const bOn = b.seconds_ago < 60 ? 1 : 0;
+        if (aOn !== bOn) return bOn - aOn;
+        return extractFleetNumber(a).localeCompare(extractFleetNumber(b), undefined, { numeric: true });
+      });
+
+      c.innerHTML = filtered.map(u => {
+        const isOnline = u.seconds_ago < 60;
+        const fleetNum = extractFleetNumber(u);
+
+        return `
+          <div class="p-3 rounded-2xl bg-slate-800/80 border ${isOnline ? 'border-emerald-500/30 hover:border-emerald-500/60' : 'border-slate-700/60 opacity-75 hover:opacity-100'} flex items-center justify-between gap-2.5 transition">
+            <div class="flex items-center gap-3 min-w-0">
+              <div class="w-10 h-10 rounded-xl ${isOnline ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-slate-700/40 text-slate-400 border border-slate-600/40'} flex items-center justify-center shrink-0 text-base shadow">
+                <i class="fa-solid fa-truck"></i>
+              </div>
+              <div class="min-w-0">
+                <div class="flex items-center gap-1.5">
+                  <span class="font-black text-white text-xs truncate">FROTA ${esc(fleetNum)}</span>
+                  <span class="w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-400 animate-ping' : 'bg-slate-500'} shrink-0"></span>
+                </div>
+                <div class="text-[10px] text-slate-400 mt-0.5 flex items-center gap-1.5">
+                  <span class="${isOnline ? 'text-emerald-300 font-bold' : ''}">${esc(u.speed_kmh)} km/h</span>
+                  <span>•</span>
+                  <span>há ${Math.round(u.seconds_ago)}s</span>
+                </div>
+              </div>
             </div>
-            <button onclick="map.setView([${Number(u.latitude)}, ${Number(u.longitude)}], 16); toggleTrackingModal();" class="px-2.5 py-1 rounded-lg bg-indigo-600 text-white font-bold text-[10px]">
-              Focar
+
+            <button onclick="focusTruckOnMap(${Number(u.latitude)}, ${Number(u.longitude)})" class="px-3 py-1.5 rounded-xl ${isOnline ? 'bg-emerald-600/25 text-emerald-300 hover:bg-emerald-600/40 border border-emerald-500/30' : 'bg-slate-700/60 text-slate-300 hover:bg-slate-700'} text-xs font-bold shrink-0 transition flex items-center gap-1">
+              <i class="fa-solid fa-crosshairs text-[10px]"></i>
+              <span>Focar</span>
             </button>
           </div>
-        `).join('');
-      } catch (e) {}
+        `;
+      }).join('');
+    }
+
+    function focusTruckOnMap(lat, lng) {
+      map.setView([lat, lng], 17, { animate: true });
+      notify('Veículo centralizado no mapa', 'info');
+    }
+
+    function fitEquipmentBounds(silent = false) {
+      const validPoints = currentActiveTrucks
+        .filter(u => typeof u.latitude === 'number' && typeof u.longitude === 'number')
+        .map(u => [u.latitude, u.longitude]);
+
+      if (!validPoints.length) {
+        if (!silent) notify('Nenhum equipamento conectado para enquadrar.', 'warning');
+        return;
+      }
+
+      if (validPoints.length === 1) {
+        map.setView(validPoints[0], 16, { animate: true });
+      } else {
+        map.fitBounds(L.latLngBounds(validPoints), { padding: [80, 80], maxZoom: 17, animate: true });
+      }
+      if (!silent) notify('Região dos equipamentos enquadrada!', 'info');
     }
   </script>
 </body>
