@@ -8,15 +8,11 @@ from psycopg2.extras import RealDictCursor
 app = Flask(__name__)
 CORS(app)
 
-# String de ligação ao Neon PostgreSQL
 DATABASE_URL = "postgresql://neondb_owner:npg_RoaYEzH5kj4Q@ep-curly-dew-b5n5cb5c-pooler.c-7.us-east-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
 
 def get_db():
     return psycopg2.connect(DATABASE_URL)
 
-# ==========================================================
-# 🏢 EMPRESAS & AUTENTICAÇÃO
-# ==========================================================
 @app.route('/api/companies', methods=['GET'])
 def list_companies():
     try:
@@ -59,9 +55,6 @@ def login():
     except Exception as e:
         return jsonify({"erro": str(e)}), 500
 
-# ==========================================================
-# 🛰️ TELEMETRIA & MONITORAMENTO DE FROTA EM TEMPO REAL
-# ==========================================================
 @app.route('/api/telemetry', methods=['POST'])
 def update_telemetry():
     data = request.get_json() or {}
@@ -75,7 +68,6 @@ def update_telemetry():
     heading = data.get('heading', 0)
     speed = data.get('speed_kmh', 0)
 
-    # Garante a identificação da frota mesmo se não informada explicitamente
     if not fleet:
         m = re.search(r'(\d{3,5})', str(name))
         fleet = m.group(1) if m else str(data.get('user_id', '1000'))
@@ -127,9 +119,6 @@ def get_active_users():
     except Exception as e:
         return jsonify({"erro": str(e)}), 500
 
-# ==========================================================
-# 🛣️ ROTAS (CRUD POR EMPRESA)
-# ==========================================================
 @app.route('/api/routes', methods=['GET'])
 def list_routes():
     cid = request.args.get('company_id')
@@ -220,9 +209,6 @@ def delete_route(route_id):
     except Exception as e:
         return jsonify({"erro": str(e)}), 500
 
-# ==========================================================
-# 🛑 CERCAS VIRTUAIS (CRUD POR EMPRESA)
-# ==========================================================
 @app.route('/api/fences', methods=['GET'])
 def list_fences():
     cid = request.args.get('company_id')
