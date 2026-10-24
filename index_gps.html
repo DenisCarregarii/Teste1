@@ -995,24 +995,28 @@
     // 📡 TRANSMISSÃO PARA A TABELA user_locations NO BANCO NEON
     function sendTelemetry(lat, lng, heading, speed) {
       const now = Date.now();
-      if (now - lastTelemetrySent < 5000 || !sessionUser) return;
+      if (now - lastTelemetrySent < 3000 || !sessionUser) return; // Envia a cada 3 segundos
       lastTelemetrySent = now;
+
+      const fleetNum = sessionUser.fleet || (sessionUser.name ? (sessionUser.name.match(/(\d{3,5})/) || [])[1] : '1000') || '1000';
 
       fetch(`${API_BASE_URL}/telemetry`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          user_id: sessionUser.id,
           company_id: sessionUser.company_id,
-          username: sessionUser.username,
-          name: sessionUser.name,
-          role: sessionUser.role,
+          fleet: String(fleetNum),
+          username: sessionUser.username || 'motorista',
+          name: `Frota ${fleetNum} (${sessionUser.company_name || 'Alpha'})`,
+          role: sessionUser.role || 'navegador',
           latitude: lat,
           longitude: lng,
-          heading: heading,
-          speed_kmh: speed
+          heading: heading || 0,
+          speed_kmh: speed || 0
         })
-      }).catch(() => {});
+      }).then(res => {
+        if (!res.ok) console.warn('Erro ao transmitir telemetria HTTP', res.status);
+      }).catch(err => console.error('Erro de conexão na telemetria', err));
     }
 
     function onGpsError(err) {
