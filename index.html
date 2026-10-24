@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>GeoNav Studio - Editor</title>
+  <title>GeoNav Studio - Editor de Rotas & Velocidades</title>
 
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
@@ -19,6 +19,40 @@
     .custom-marker-pin { display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 800; border-radius: 9999px; border: 2px solid #fff; box-shadow: 0 4px 10px rgba(0,0,0,0.45); }
     .sidebar-expanded { width: 240px; }
     .sidebar-collapsed { width: 68px; }
+
+    /* Placas e Badges de Velocidade na via */
+    .speed-segment-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      color: #0f172a;
+      background: #ffffff;
+      font-weight: 900;
+      font-size: 10px;
+      padding: 2px 7px;
+      border-radius: 9999px;
+      border: 2px solid #dc2626;
+      box-shadow: 0 3px 10px rgba(0,0,0,0.4);
+      transform: translate(-50%, -50%);
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .speed-badge-unpaved {
+      border-color: #d97706 !important;
+      background: #fffbeb !important;
+      color: #78350f !important;
+    }
+
+    .mid-handle {
+      width: 13px;
+      height: 13px;
+      border-radius: 9999px;
+      background: rgba(255, 255, 255, 0.95);
+      border: 2.5px solid #4f46e5;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+      cursor: pointer;
+      transform: translate(-50%, -50%);
+    }
   </style>
 </head>
 
@@ -27,7 +61,6 @@
   <!-- 🍔 MENU LATERAL RETRÁTIL EXPANSÍVEL -->
   <aside id="mainSidebar" class="sidebar-collapsed transition-all duration-300 bg-slate-900 border-r border-slate-800 flex flex-col justify-between z-40 shrink-0">
     <div>
-      <!-- Topo do Menu com Toggle -->
       <div class="h-16 flex items-center justify-between px-4 border-b border-slate-800/80">
         <div class="flex items-center gap-3 overflow-hidden">
           <div class="w-9 h-9 rounded-xl bg-indigo-600 flex items-center justify-center text-white shrink-0 shadow-lg shadow-indigo-600/30">
@@ -40,17 +73,20 @@
         </button>
       </div>
 
-      <!-- Identificação da Empresa -->
       <div class="p-3 border-b border-slate-800/60 flex items-center gap-2 overflow-hidden">
         <div class="w-2.5 h-2.5 rounded-full bg-emerald-400 shrink-0"></div>
         <span id="companyBadge" class="sidebar-text hidden text-[11px] font-bold text-slate-300 truncate">Empresa</span>
       </div>
 
-      <!-- Ícones / Ferramentas -->
       <nav class="p-2 space-y-1.5">
-        <button onclick="setAppMode('edit')" id="navEditBtn" title="Desenhar Rotas" class="w-full flex items-center gap-3.5 px-3 py-2.5 rounded-xl bg-indigo-600 text-white font-semibold text-xs transition">
+        <button onclick="setAppMode('edit')" id="navEditBtn" title="Desenhar Traçado" class="w-full flex items-center gap-3.5 px-3 py-2.5 rounded-xl bg-indigo-600 text-white font-semibold text-xs transition">
           <i class="fa-solid fa-bezier-curve text-sm shrink-0"></i>
-          <span class="sidebar-text hidden whitespace-nowrap">Desenhar Rotas</span>
+          <span class="sidebar-text hidden whitespace-nowrap">Desenhar Rota</span>
+        </button>
+
+        <button onclick="setAppMode('speed')" id="navSpeedBtn" title="Definir Limites de Velocidade" class="w-full flex items-center gap-3.5 px-3 py-2.5 rounded-xl text-slate-400 hover:bg-slate-800 hover:text-white font-semibold text-xs transition">
+          <i class="fa-solid fa-gauge-high text-sm shrink-0"></i>
+          <span class="sidebar-text hidden whitespace-nowrap">Limites de Via</span>
         </button>
 
         <button onclick="setAppMode('fence')" id="navFenceBtn" title="Cercas Geográficas" class="w-full flex items-center gap-3.5 px-3 py-2.5 rounded-xl text-slate-400 hover:bg-slate-800 hover:text-white font-semibold text-xs transition">
@@ -75,7 +111,6 @@
       </nav>
     </div>
 
-    <!-- Rodapé do Menu (Sair) -->
     <div class="p-2 border-t border-slate-800">
       <button onclick="logout()" title="Terminar Sessão" class="w-full flex items-center gap-3.5 px-3 py-2.5 rounded-xl text-rose-400 hover:bg-rose-500/10 text-xs font-semibold transition">
         <i class="fa-solid fa-power-off text-sm shrink-0"></i>
@@ -88,6 +123,18 @@
   <main class="relative flex-1 w-full h-full overflow-hidden">
     <div id="map"></div>
 
+    <!-- Banner Indicativo de Rota em Edição -->
+    <div id="editingRouteBanner" class="hidden absolute top-4 left-4 z-20 bg-indigo-600/90 backdrop-blur-md border border-indigo-400/50 rounded-2xl px-4 py-2 flex items-center gap-3 shadow-2xl">
+      <div class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping"></div>
+      <div class="text-xs">
+        <span class="font-bold text-white block" id="editingRouteName">Editando Rota</span>
+        <span class="text-[10px] text-indigo-200">Arraste pontos para mudar o trajeto ou clique nas placas para mudar a velocidade</span>
+      </div>
+      <button onclick="cancelEditingRoute()" class="text-xs text-indigo-200 hover:text-white ml-2 bg-indigo-700/60 hover:bg-indigo-700 px-2 py-1 rounded-lg">
+        Criar Nova
+      </button>
+    </div>
+
     <!-- Controles Flutuantes à Direita -->
     <div class="absolute right-3 top-4 flex flex-col gap-1.5 z-20">
       <button onclick="map.zoomIn()" class="w-10 h-10 rounded-xl bg-slate-900/90 text-slate-200 border border-slate-700/80 shadow flex items-center justify-center hover:bg-slate-800"><i class="fa-solid fa-plus text-xs"></i></button>
@@ -96,37 +143,90 @@
       <button onclick="findMyCurrentLocation()" title="Minha Posição" class="w-10 h-10 rounded-xl bg-slate-900/90 text-indigo-400 border border-slate-700/80 shadow flex items-center justify-center hover:bg-slate-800"><i class="fa-solid fa-crosshairs text-xs"></i></button>
     </div>
 
-    <!-- PAINEL INFERIOR: MODO ROTAS -->
-    <div id="editToolbar" class="absolute bottom-4 left-3 right-3 md:left-1/2 md:-translate-x-1/2 md:w-[620px] bg-slate-900/95 backdrop-blur-md rounded-2xl border border-slate-800 shadow-2xl p-3 z-20 flex items-center justify-between">
-      <div class="flex items-center gap-3 text-xs">
-        <span id="routePointsCount" class="font-bold text-emerald-400">0 pts</span>
+    <!-- PAINEL INFERIOR: MODO ROTAS (BARRA DE AÇÃO PRINCIPAL) -->
+    <div id="editToolbar" class="absolute bottom-4 left-3 right-3 md:left-1/2 md:-translate-x-1/2 md:w-[720px] bg-slate-900/95 backdrop-blur-md rounded-2xl border border-slate-800 shadow-2xl p-3 z-20 flex flex-col sm:flex-row items-center justify-between gap-2.5">
+      <div class="flex items-center gap-3 text-xs w-full sm:w-auto justify-between sm:justify-start">
+        <span id="routePointsCount" class="font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-lg border border-emerald-500/20">0 pontos</span>
         <span class="text-slate-600">|</span>
         <span id="routeTotalDistance" class="font-bold text-white">0.00 km</span>
+        <span id="activeModeBadge" class="hidden sm:inline-block text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">MODO TRAÇADO</span>
       </div>
-      <div class="flex items-center gap-2">
-        <button onclick="undoLastWaypoint()" class="px-2.5 py-1.5 rounded-xl bg-slate-800 text-slate-300 text-xs hover:bg-slate-700 border border-slate-700">Desfazer</button>
-        <button onclick="clearCurrentRoute()" class="px-2.5 py-1.5 rounded-xl bg-rose-500/10 text-rose-300 text-xs hover:bg-rose-500/20 border border-rose-500/30">Limpar</button>
-        <button onclick="openSaveModal()" class="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow flex items-center gap-1.5">
-          <i class="fa-solid fa-cloud-arrow-up"></i>
-          <span>Guardar Rota</span>
+
+      <div class="flex items-center gap-2 w-full sm:w-auto justify-end">
+        <button onclick="undoLastWaypoint()" title="Remover último ponto" class="px-3 py-2 rounded-xl bg-slate-800 text-slate-300 text-xs font-semibold hover:bg-slate-700 border border-slate-700 flex items-center gap-1.5 transition">
+          <i class="fa-solid fa-rotate-left"></i>
+          <span>Desfazer</span>
+        </button>
+
+        <button onclick="clearCurrentRoute()" title="Limpar mapa" class="px-3 py-2 rounded-xl bg-rose-500/10 text-rose-300 text-xs font-semibold hover:bg-rose-500/20 border border-rose-500/30 flex items-center gap-1.5 transition">
+          <i class="fa-solid fa-trash-can"></i>
+          <span>Limpar</span>
+        </button>
+
+        <button onclick="openSaveModal()" id="btnOpenSaveModal" class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-lg shadow-emerald-600/30 flex items-center gap-2 transition active:scale-95">
+          <i class="fa-solid fa-cloud-arrow-up text-sm"></i>
+          <span id="saveButtonLabel">Guardar Rota</span>
         </button>
       </div>
     </div>
 
     <!-- PAINEL INFERIOR: MODO CERCAS -->
-    <div id="fenceToolbar" class="hidden absolute bottom-4 left-3 right-3 md:left-1/2 md:-translate-x-1/2 md:w-[620px] bg-slate-900/95 backdrop-blur-md rounded-2xl border border-rose-500/40 shadow-2xl p-3 z-20 flex items-center justify-between">
-      <div class="text-xs font-bold text-rose-300">
-        Desenhar Cerca: <span id="fencePointsCount" class="text-white font-normal">0 vértices</span>
+    <div id="fenceToolbar" class="hidden absolute bottom-4 left-3 right-3 md:left-1/2 md:-translate-x-1/2 md:w-[680px] bg-slate-900/95 backdrop-blur-md rounded-2xl border border-rose-500/40 shadow-2xl p-3 z-20 flex items-center justify-between">
+      <div class="text-xs font-bold text-rose-300 flex items-center gap-2">
+        <i class="fa-solid fa-draw-polygon"></i>
+        <span>Desenhar Cerca:</span>
+        <span id="fencePointsCount" class="text-white font-normal bg-slate-800 px-2 py-0.5 rounded">0 vértices</span>
       </div>
       <div class="flex items-center gap-2">
-        <button onclick="clearCurrentFenceDraft()" class="px-2.5 py-1.5 rounded-xl bg-slate-800 text-slate-300 text-xs">Limpar</button>
-        <button onclick="openSaveFenceModal()" class="px-3.5 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow flex items-center gap-1.5">
+        <button onclick="clearCurrentFenceDraft()" class="px-3 py-2 rounded-xl bg-slate-800 text-slate-300 text-xs hover:bg-slate-700">Limpar</button>
+        <button onclick="openSaveFenceModal()" class="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow flex items-center gap-1.5">
           <i class="fa-solid fa-check"></i>
           <span>Guardar Cerca</span>
         </button>
       </div>
     </div>
   </main>
+
+  <!-- MODAL: AJUSTE DE VELOCIDADE DO TRECHO -->
+  <div id="speedModal" class="hidden fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-3">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-xs p-5 flex flex-col gap-4 shadow-2xl">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+        <h3 class="font-bold text-sm text-white flex items-center gap-2">
+          <i class="fa-solid fa-gauge-high text-amber-400"></i>
+          Definir Trecho
+        </h3>
+        <button onclick="closeSpeedModal()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-xs"></i></button>
+      </div>
+
+      <div>
+        <label class="text-xs font-semibold text-slate-400 block mb-1.5">Limite de Velocidade (km/h)</label>
+        <div class="grid grid-cols-4 gap-1.5 mb-2">
+          <button onclick="setSpeedInputValue(30)" class="py-1 rounded bg-slate-800 hover:bg-slate-700 text-xs font-bold text-white border border-slate-700">30</button>
+          <button onclick="setSpeedInputValue(40)" class="py-1 rounded bg-slate-800 hover:bg-slate-700 text-xs font-bold text-white border border-slate-700">40</button>
+          <button onclick="setSpeedInputValue(60)" class="py-1 rounded bg-slate-800 hover:bg-slate-700 text-xs font-bold text-white border border-slate-700">60</button>
+          <button onclick="setSpeedInputValue(80)" class="py-1 rounded bg-slate-800 hover:bg-slate-700 text-xs font-bold text-white border border-slate-700">80</button>
+        </div>
+        <input id="segmentSpeedInput" type="number" step="5" min="10" max="150" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3.5 py-2 text-sm text-white text-center font-bold focus:outline-none focus:border-indigo-500">
+      </div>
+
+      <div>
+        <label class="text-xs font-semibold text-slate-400 block mb-1.5">Tipo de Pavimento</label>
+        <div class="grid grid-cols-2 gap-2">
+          <button id="btnPaved" onclick="setRoadTypeInput('paved')" class="py-2 rounded-xl text-xs font-bold bg-indigo-600 text-white border border-indigo-500 flex items-center justify-center gap-1.5">
+            <i class="fa-solid fa-road"></i> Asfalto
+          </button>
+          <button id="btnDirt" onclick="setRoadTypeInput('unpaved')" class="py-2 rounded-xl text-xs font-bold bg-slate-800 text-slate-400 border border-slate-700 hover:text-white flex items-center justify-center gap-1.5">
+            <i class="fa-solid fa-mountain"></i> Terra / Não pav.
+          </button>
+        </div>
+      </div>
+
+      <div class="flex justify-end gap-2 pt-2 border-t border-slate-800">
+        <button onclick="closeSpeedModal()" class="px-3.5 py-1.5 rounded-xl bg-slate-800 text-slate-300 text-xs hover:bg-slate-700">Cancelar</button>
+        <button onclick="confirmSegmentSpeed()" class="px-4 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow">Aplicar</button>
+      </div>
+    </div>
+  </div>
 
   <!-- MODAL: MONITORIZAÇÃO EM TEMPO REAL -->
   <div id="trackingModal" class="hidden fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-3">
@@ -142,18 +242,54 @@
     </div>
   </div>
 
-  <!-- MODAIS DE GRAVAÇÃO E ROTAS -->
+  <!-- MODAL: GUARDAR / ATUALIZAR ROTA NO BANCO -->
   <div id="saveModal" class="hidden fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-3">
-    <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-sm p-4 flex flex-col gap-3">
-      <h3 class="font-bold text-sm text-white">Guardar Rota na Empresa</h3>
-      <input id="routeNameInput" type="text" placeholder="Nome da Rota" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-sm p-5 flex flex-col gap-3 shadow-2xl">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+        <h3 class="font-bold text-sm text-white flex items-center gap-2" id="saveModalTitle">
+          <i class="fa-solid fa-cloud-arrow-up text-emerald-400"></i>
+          Guardar Rota na Empresa
+        </h3>
+        <button onclick="closeSaveModal()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-xs"></i></button>
+      </div>
+      
+      <div>
+        <label class="text-[11px] font-semibold text-slate-400 block mb-1">Nome da Rota</label>
+        <input id="routeNameInput" type="text" placeholder="Ex: Rota Principal 01" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500">
+      </div>
+
+      <div class="flex items-center justify-between text-xs bg-slate-800/60 p-2.5 rounded-xl border border-slate-700/50">
+        <span class="text-slate-400">Distância Total:</span>
+        <span id="saveModalDistLabel" class="font-bold text-white">0.00 km</span>
+      </div>
+
       <div class="flex justify-end gap-2 pt-2 border-t border-slate-800">
-        <button onclick="closeSaveModal()" class="px-3 py-1.5 rounded-xl bg-slate-800 text-slate-300 text-xs">Cancelar</button>
-        <button onclick="confirmSaveRoute()" class="px-3.5 py-1.5 rounded-xl bg-emerald-600 text-white font-bold text-xs">Guardar</button>
+        <button onclick="closeSaveModal()" class="px-3.5 py-2 rounded-xl bg-slate-800 text-slate-300 text-xs hover:bg-slate-700">Cancelar</button>
+        <button onclick="confirmSaveRoute()" id="btnSubmitSaveRoute" class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow flex items-center gap-1.5">
+          <i class="fa-solid fa-check"></i>
+          <span id="btnSubmitSaveRouteText">Confirmar & Guardar</span>
+        </button>
       </div>
     </div>
   </div>
 
+  <!-- MODAL: GESTOR DE ROTAS GUARDADAS -->
+  <div id="routeManagerModal" class="hidden fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-3">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg flex flex-col max-h-[80vh] overflow-hidden shadow-2xl">
+      <div class="p-3.5 border-b border-slate-800 flex items-center justify-between">
+        <h3 class="font-bold text-sm text-white flex items-center gap-2">
+          <i class="fa-solid fa-database text-emerald-400"></i>
+          Rotas Guardadas no Banco de Dados
+        </h3>
+        <button onclick="toggleRouteManagerModal()" class="w-7 h-7 rounded-lg bg-slate-800 text-slate-400 flex items-center justify-center"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div id="savedRoutesContainer" class="p-3.5 overflow-y-auto space-y-2 text-xs no-scrollbar">
+        <p class="text-slate-400 text-center py-4"><i class="fa-solid fa-spinner fa-spin mr-2"></i>A carregar rotas do banco...</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: GUARDAR CERCA -->
   <div id="saveFenceModal" class="hidden fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-3">
     <div class="bg-slate-900 border border-rose-500/40 rounded-2xl w-full max-w-sm p-4 flex flex-col gap-3">
       <h3 class="font-bold text-sm text-white">Definir Restrição de Cerca</h3>
@@ -164,19 +300,9 @@
         <span class="text-xs text-slate-400">km/h</span>
       </div>
       <div class="flex justify-end gap-2 pt-2 border-t border-slate-800">
-        <button onclick="closeSaveFenceModal()" class="px-3 py-1.5 rounded-xl bg-slate-800 text-slate-300 text-xs">Cancelar</button>
+        <button onclick="closeSaveFenceModal()" class="px-3.5 py-1.5 rounded-xl bg-slate-800 text-slate-300 text-xs">Cancelar</button>
         <button onclick="confirmSaveFence()" class="px-3.5 py-1.5 rounded-xl bg-rose-600 text-white font-bold text-xs">Guardar</button>
       </div>
-    </div>
-  </div>
-
-  <div id="routeManagerModal" class="hidden fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-3">
-    <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md flex flex-col max-h-[80vh] overflow-hidden">
-      <div class="p-3.5 border-b border-slate-800 flex items-center justify-between">
-        <h3 class="font-bold text-sm text-white">Rotas Guardadas</h3>
-        <button onclick="toggleRouteManagerModal()" class="w-7 h-7 rounded-lg bg-slate-800 text-slate-400 flex items-center justify-center"><i class="fa-solid fa-xmark"></i></button>
-      </div>
-      <div id="savedRoutesContainer" class="p-3.5 overflow-y-auto space-y-2 text-xs no-scrollbar"></div>
     </div>
   </div>
 
@@ -213,9 +339,12 @@
       }
     }
 
-    let map = null, markersLayer = null, routeSegmentsLayer = null, trackingLayer = null, savedFencesLayer = null, activeFenceLayer = null;
+    let map = null, markersLayer = null, routeSegmentsLayer = null, badgesLayer = null, midHandlesLayer = null, trackingLayer = null, savedFencesLayer = null, activeFenceLayer = null;
     let waypoints = [], currentFencePoints = [];
     let appMode = 'edit', totalRouteDistanceMeters = 0;
+    let editingRouteId = null; 
+    let activeEditingSegmentIndex = null;
+    let currentRoadTypeDraft = 'paved';
 
     window.addEventListener('load', () => {
       initMap();
@@ -231,6 +360,8 @@
       savedFencesLayer = L.layerGroup().addTo(map);
       activeFenceLayer = L.layerGroup().addTo(map);
       routeSegmentsLayer = L.layerGroup().addTo(map);
+      badgesLayer = L.layerGroup().addTo(map);
+      midHandlesLayer = L.layerGroup().addTo(map);
       markersLayer = L.layerGroup().addTo(map);
       trackingLayer = L.layerGroup().addTo(map);
 
@@ -239,7 +370,12 @@
 
     function onMapClick(e) {
       if (appMode === 'edit') {
-        waypoints.push({ lat: e.latlng.lat, lng: e.latlng.lng, speedLimit: 80, roadType: 'paved' });
+        waypoints.push({ 
+          lat: e.latlng.lat, 
+          lng: e.latlng.lng, 
+          speedLimit: 60, // Limite padrão
+          roadType: 'paved' 
+        });
         refreshRouteVisuals();
       } else if (appMode === 'fence') {
         currentFencePoints.push({ lat: e.latlng.lat, lng: e.latlng.lng });
@@ -249,39 +385,146 @@
 
     function setAppMode(mode) {
       appMode = mode;
-      document.getElementById('editToolbar').classList.toggle('hidden', mode !== 'edit');
+      document.getElementById('editToolbar').classList.toggle('hidden', mode === 'fence');
       document.getElementById('fenceToolbar').classList.toggle('hidden', mode !== 'fence');
+      
+      const badge = document.getElementById('activeModeBadge');
+      if (mode === 'edit') {
+        badge.innerText = 'MODO TRAÇADO (CLIQUE PARA ADICIONAR)';
+        badge.className = 'hidden sm:inline-block text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30';
+      } else if (mode === 'speed') {
+        badge.innerText = 'MODO VELOCIDADE (CLIQUE NAS PLACAS)';
+        badge.className = 'hidden sm:inline-block text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30';
+      }
+
       document.getElementById('navEditBtn').className = mode === 'edit' ? 'w-full flex items-center gap-3.5 px-3 py-2.5 rounded-xl bg-indigo-600 text-white font-semibold text-xs transition' : 'w-full flex items-center gap-3.5 px-3 py-2.5 rounded-xl text-slate-400 hover:bg-slate-800 font-semibold text-xs transition';
+      document.getElementById('navSpeedBtn').className = mode === 'speed' ? 'w-full flex items-center gap-3.5 px-3 py-2.5 rounded-xl bg-amber-600 text-white font-semibold text-xs transition' : 'w-full flex items-center gap-3.5 px-3 py-2.5 rounded-xl text-slate-400 hover:bg-slate-800 font-semibold text-xs transition';
       document.getElementById('navFenceBtn').className = mode === 'fence' ? 'w-full flex items-center gap-3.5 px-3 py-2.5 rounded-xl bg-rose-600 text-white font-semibold text-xs transition' : 'w-full flex items-center gap-3.5 px-3 py-2.5 rounded-xl text-slate-400 hover:bg-slate-800 font-semibold text-xs transition';
+
+      refreshRouteVisuals();
     }
 
+    // 🎨 RENDERIZAÇÃO DE ROTA, SEGMENTOS, LIMITES E PONTOS INTERMEDIÁRIOS
     function refreshRouteVisuals() {
       markersLayer.clearLayers();
       routeSegmentsLayer.clearLayers();
+      badgesLayer.clearLayers();
+      midHandlesLayer.clearLayers();
       let totalM = 0;
 
       for (let i = 0; i < waypoints.length - 1; i++) {
         const p1 = waypoints[i], p2 = waypoints[i + 1];
-        totalM += distanceInMeters(p1.lat, p1.lng, p2.lat, p2.lng);
-        L.polyline([[p1.lat, p1.lng], [p2.lat, p2.lng]], { color: '#4f46e5', weight: 6 }).addTo(routeSegmentsLayer);
+        const segDist = distanceInMeters(p1.lat, p1.lng, p2.lat, p2.lng);
+        totalM += segDist;
+
+        const isUnpaved = p1.roadType === 'unpaved';
+        const color = isUnpaved ? '#d97706' : '#4f46e5';
+        const dash = isUnpaved ? '8, 8' : null;
+
+        // Desenha o segmento de via
+        const segPolyline = L.polyline([[p1.lat, p1.lng], [p2.lat, p2.lng]], { 
+          color: color, 
+          weight: 6,
+          dashArray: dash,
+          opacity: 0.9
+        }).addTo(routeSegmentsLayer);
+
+        segPolyline.on('click', () => openSpeedModalForSegment(i));
+
+        // Placa de velocidade do trecho centralizada no segmento
+        const midLat = (p1.lat + p2.lat) / 2;
+        const midLng = (p1.lng + p2.lng) / 2;
+        const limit = p1.speedLimit || 60;
+        const badgeCls = isUnpaved ? 'speed-segment-badge speed-badge-unpaved' : 'speed-segment-badge';
+
+        const badgeHtml = `
+          <div class="${badgeCls}" title="Clique para alterar velocidade do trecho">
+            <span>${limit}</span>
+            <span style="font-size:8px;">km/h</span>
+          </div>
+        `;
+        const badgeIcon = L.divIcon({ html: badgeHtml, className: '', iconSize: [40, 20], iconAnchor: [20, 10] });
+        L.marker([midLat, midLng], { icon: badgeIcon, zIndexOffset: 400 })
+          .on('click', () => openSpeedModalForSegment(i))
+          .addTo(badgesLayer);
+
+        // Pontinho intermediário no meio do trecho para criar curva/adicionar ponto extra
+        const midHandleIcon = L.divIcon({ html: '<div class="mid-handle"></div>', className: '', iconSize: [14, 14], iconAnchor: [7, 7] });
+        L.marker([midLat, midLng], { icon: midHandleIcon, zIndexOffset: 350 })
+          .on('click', (e) => {
+            L.DomEvent.stopPropagation(e);
+            waypoints.splice(i + 1, 0, { lat: midLat, lng: midLng, speedLimit: p1.speedLimit || 60, roadType: p1.roadType || 'paved' });
+            refreshRouteVisuals();
+          })
+          .addTo(midHandlesLayer);
       }
 
       totalRouteDistanceMeters = totalM;
-      document.getElementById('routePointsCount').innerText = `${waypoints.length} pts`;
+      document.getElementById('routePointsCount').innerText = `${waypoints.length} pontos`;
       document.getElementById('routeTotalDistance').innerText = totalM >= 1000 ? `${(totalM / 1000).toFixed(2)} km` : `${Math.round(totalM)} m`;
 
       waypoints.forEach((pt, i) => {
         const isStart = i === 0, isEnd = i === waypoints.length - 1 && waypoints.length > 1;
         const bg = isStart ? 'bg-emerald-500' : (isEnd ? 'bg-rose-500' : 'bg-indigo-600');
-        const icon = L.divIcon({ html: `<div class="custom-marker-pin ${bg}" style="width:26px;height:26px;font-size:11px;">${i + 1}</div>`, className: '', iconSize: [26, 26], iconAnchor: [13, 13] });
+        const icon = L.divIcon({ 
+          html: `<div class="custom-marker-pin ${bg}" style="width:26px;height:26px;font-size:11px;">${i + 1}</div>`, 
+          className: '', 
+          iconSize: [26, 26], 
+          iconAnchor: [13, 13] 
+        });
         
-        // dragend para manter movimento suave e sem travamentos
-        L.marker([pt.lat, pt.lng], { icon, draggable: true }).on('dragend', (e) => {
+        const marker = L.marker([pt.lat, pt.lng], { icon, draggable: true }).addTo(markersLayer);
+
+        marker.on('dragend', (e) => {
           pt.lat = e.target.getLatLng().lat;
           pt.lng = e.target.getLatLng().lng;
           refreshRouteVisuals();
-        }).addTo(markersLayer);
+        });
+
+        marker.on('contextmenu', () => {
+          waypoints.splice(i, 1);
+          refreshRouteVisuals();
+        });
       });
+    }
+
+    // 🚦 AJUSTE INTERATIVO DE VELOCIDADE
+    function openSpeedModalForSegment(index) {
+      activeEditingSegmentIndex = index;
+      const pt = waypoints[index];
+      document.getElementById('segmentSpeedInput').value = pt.speedLimit || 60;
+      setRoadTypeInput(pt.roadType || 'paved');
+      document.getElementById('speedModal').classList.remove('hidden');
+    }
+
+    function closeSpeedModal() {
+      document.getElementById('speedModal').classList.add('hidden');
+    }
+
+    function setSpeedInputValue(val) {
+      document.getElementById('segmentSpeedInput').value = val;
+    }
+
+    function setRoadTypeInput(type) {
+      currentRoadTypeDraft = type;
+      const btnP = document.getElementById('btnPaved');
+      const btnD = document.getElementById('btnDirt');
+      if (type === 'unpaved') {
+        btnD.className = 'py-2 rounded-xl text-xs font-bold bg-amber-600 text-white border border-amber-500 flex items-center justify-center gap-1.5';
+        btnP.className = 'py-2 rounded-xl text-xs font-bold bg-slate-800 text-slate-400 border border-slate-700 hover:text-white flex items-center justify-center gap-1.5';
+      } else {
+        btnP.className = 'py-2 rounded-xl text-xs font-bold bg-indigo-600 text-white border border-indigo-500 flex items-center justify-center gap-1.5';
+        btnD.className = 'py-2 rounded-xl text-xs font-bold bg-slate-800 text-slate-400 border border-slate-700 hover:text-white flex items-center justify-center gap-1.5';
+      }
+    }
+
+    function confirmSegmentSpeed() {
+      if (activeEditingSegmentIndex === null || !waypoints[activeEditingSegmentIndex]) return;
+      const speedVal = parseInt(document.getElementById('segmentSpeedInput').value, 10) || 60;
+      waypoints[activeEditingSegmentIndex].speedLimit = speedVal;
+      waypoints[activeEditingSegmentIndex].roadType = currentRoadTypeDraft;
+      closeSpeedModal();
+      refreshRouteVisuals();
     }
 
     function distanceInMeters(lat1, lon1, lat2, lon2) {
@@ -292,23 +535,51 @@
     }
 
     function undoLastWaypoint() { waypoints.pop(); refreshRouteVisuals(); }
-    function clearCurrentRoute() { waypoints = []; refreshRouteVisuals(); }
+    function clearCurrentRoute() { 
+      waypoints = []; 
+      editingRouteId = null; 
+      document.getElementById('editingRouteBanner').classList.add('hidden');
+      document.getElementById('saveButtonLabel').innerText = 'Guardar Rota';
+      refreshRouteVisuals(); 
+    }
+
     function fitRouteBounds() { if (waypoints.length > 0) map.fitBounds(L.latLngBounds(waypoints.map(p => [p.lat, p.lng])), { padding: [50, 50] }); }
     function findMyCurrentLocation() { navigator.geolocation.getCurrentPosition(p => map.setView([p.coords.latitude, p.coords.longitude], 16)); }
 
-    // API MULTI-TENANT (POR EMPRESA)
-    function openSaveModal() { if (waypoints.length >= 2) document.getElementById('saveModal').classList.remove('hidden'); }
+    // 💾 SALVAMENTO NO BANCO
+    function openSaveModal() { 
+      if (waypoints.length < 2) { 
+        alert('Desenhe pelo menos 2 pontos no mapa antes de salvar!'); 
+        return; 
+      } 
+      document.getElementById('saveModalDistLabel').innerText = totalRouteDistanceMeters >= 1000 ? `${(totalRouteDistanceMeters / 1000).toFixed(2)} km` : `${Math.round(totalRouteDistanceMeters)} m`;
+      
+      if (editingRouteId) {
+        document.getElementById('saveModalTitle').innerHTML = '<i class="fa-solid fa-pen-to-square text-amber-400"></i> Atualizar Rota Existente';
+        document.getElementById('btnSubmitSaveRouteText').innerText = 'Atualizar Rota';
+      } else {
+        document.getElementById('saveModalTitle').innerHTML = '<i class="fa-solid fa-cloud-arrow-up text-emerald-400"></i> Guardar Nova Rota';
+        document.getElementById('btnSubmitSaveRouteText').innerText = 'Guardar Nova';
+      }
+
+      document.getElementById('saveModal').classList.remove('hidden'); 
+    }
+
     function closeSaveModal() { document.getElementById('saveModal').classList.add('hidden'); }
 
     async function confirmSaveRoute() {
       const name = document.getElementById('routeNameInput').value.trim() || 'Nova Rota';
-      const btn = document.getElementById('saveModal').querySelector('button.bg-emerald-600');
+      const btn = document.getElementById('btnSubmitSaveRoute');
       btn.disabled = true;
-      btn.innerText = 'A guardar...';
+      btn.innerText = 'A processar...';
 
       try {
-        const res = await fetch(`${API_BASE_URL}/routes`, {
-          method: 'POST',
+        const isUpdate = !!editingRouteId;
+        const url = isUpdate ? `${API_BASE_URL}/routes/${editingRouteId}` : `${API_BASE_URL}/routes`;
+        const method = isUpdate ? 'PUT' : 'POST';
+
+        const res = await fetch(url, {
+          method: method,
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ 
             company_id: sessionUser.company_id, 
@@ -320,20 +591,20 @@
         
         if (!res.ok) {
           const err = await res.json();
-          alert('Erro ao gravar: ' + (err.erro || 'Falha na comunicação'));
+          alert('Erro ao guardar no banco: ' + (err.erro || 'Falha de comunicação'));
           return;
         }
 
         closeSaveModal();
-        waypoints = [];
-        refreshRouteVisuals();
+        alert(isUpdate ? `Rota "${name}" atualizada com sucesso no banco!` : `Rota "${name}" guardada com sucesso!`);
+        
+        clearCurrentRoute();
         await fetchRoutesFromDatabase();
-        alert(`Rota "${name}" guardada com sucesso!`);
       } catch (e) {
-        alert('Erro de conexão ao salvar rota.');
+        alert('Erro de conexão ao comunicar com a API na nuvem.');
       } finally {
         btn.disabled = false;
-        btn.innerText = 'Guardar';
+        btn.innerText = 'Confirmar & Guardar';
       }
     }
 
@@ -342,26 +613,67 @@
         const res = await fetch(`${API_BASE_URL}/routes?company_id=${sessionUser.company_id}`);
         const data = await res.json();
         const c = document.getElementById('savedRoutesContainer');
+        if (!data.length) {
+          c.innerHTML = '<p class="text-slate-500 text-center py-6">Nenhuma rota guardada nesta empresa ainda.</p>';
+          return;
+        }
+
         c.innerHTML = data.map(item => `
-          <div class="bg-slate-800 p-2.5 rounded-xl border border-slate-700 flex items-center justify-between">
-            <div>
-              <p class="font-bold text-white text-xs">${item.name}</p>
-              <p class="text-[10px] text-slate-400">${(item.distance_meters / 1000).toFixed(2)} km</p>
+          <div class="bg-slate-800 p-3 rounded-xl border border-slate-700/80 flex items-center justify-between hover:border-slate-600 transition">
+            <div class="min-w-0 flex-1 mr-3">
+              <p class="font-bold text-white text-xs truncate">${item.name}</p>
+              <p class="text-[10px] text-slate-400 mt-0.5">${(item.distance_meters / 1000).toFixed(2)} km • ${item.waypoints.length} pontos</p>
             </div>
-            <div class="flex gap-1">
-              <button onclick='loadRoute(${JSON.stringify(item.waypoints)})' class="w-7 h-7 bg-indigo-600/30 text-indigo-300 rounded-lg flex items-center justify-center"><i class="fa-solid fa-download text-xs"></i></button>
-              <button onclick="deleteRoute('${item.id}')" class="w-7 h-7 bg-rose-500/20 text-rose-300 rounded-lg flex items-center justify-center"><i class="fa-solid fa-trash text-xs"></i></button>
+            <div class="flex items-center gap-1.5 shrink-0">
+              <button onclick='loadRouteToEdit(${JSON.stringify(item)})' title="Carregar e Editar Trajeto" class="px-2.5 py-1.5 bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-300 rounded-lg flex items-center gap-1 font-bold">
+                <i class="fa-solid fa-pen-to-square text-xs"></i>
+                <span>Editar</span>
+              </button>
+              <button onclick="deleteRoute('${item.id}')" title="Excluir Rota" class="w-7 h-7 bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 rounded-lg flex items-center justify-center">
+                <i class="fa-solid fa-trash text-xs"></i>
+              </button>
             </div>
           </div>
         `).join('');
-      } catch (e) {}
+      } catch (e) {
+        document.getElementById('savedRoutesContainer').innerHTML = '<p class="text-rose-400 text-center py-4">Erro ao carregar rotas do banco.</p>';
+      }
     }
 
-    function loadRoute(pts) { waypoints = pts; refreshRouteVisuals(); fitRouteBounds(); toggleRouteManagerModal(); }
-    async function deleteRoute(id) { if (confirm('Eliminar rota?')) { await fetch(`${API_BASE_URL}/routes/${id}`, { method: 'DELETE' }); fetchRoutesFromDatabase(); } }
-    function toggleRouteManagerModal() { document.getElementById('routeManagerModal').classList.toggle('hidden'); }
+    function loadRouteToEdit(routeObj) {
+      waypoints = routeObj.waypoints || [];
+      editingRouteId = routeObj.id;
+      document.getElementById('routeNameInput').value = routeObj.name;
+      document.getElementById('editingRouteName').innerText = `Editando: ${routeObj.name}`;
+      document.getElementById('editingRouteBanner').classList.remove('hidden');
+      document.getElementById('saveButtonLabel').innerText = 'Salvar Alterações';
 
-    // Cercas
+      refreshRouteVisuals();
+      fitRouteBounds();
+      toggleRouteManagerModal();
+    }
+
+    function cancelEditingRoute() {
+      editingRouteId = null;
+      document.getElementById('editingRouteBanner').classList.add('hidden');
+      document.getElementById('saveButtonLabel').innerText = 'Guardar Rota';
+      document.getElementById('routeNameInput').value = '';
+    }
+
+    async function deleteRoute(id) { 
+      if (confirm('Deseja realmente eliminar esta rota do banco de dados?')) { 
+        await fetch(`${API_BASE_URL}/routes/${id}`, { method: 'DELETE' }); 
+        fetchRoutesFromDatabase(); 
+      } 
+    }
+
+    function toggleRouteManagerModal() { 
+      const m = document.getElementById('routeManagerModal');
+      m.classList.toggle('hidden');
+      if (!m.classList.contains('hidden')) fetchRoutesFromDatabase();
+    }
+
+    // 🛑 CERCAS VIRTUAIS
     function refreshActiveFenceVisuals() {
       activeFenceLayer.clearLayers();
       document.getElementById('fencePointsCount').innerText = `${currentFencePoints.length} vértices`;
@@ -392,7 +704,7 @@
       fences.forEach(f => L.polygon(f.points.map(p => [p.lat, p.lng]), { color: '#ef4444', fillOpacity: 0.25 }).addTo(savedFencesLayer));
     }
 
-    // Telemetria isolada da Empresa
+    // 📡 TELEMETRIA MULTI-EMPRESA
     function toggleTrackingModal() {
       const m = document.getElementById('trackingModal');
       m.classList.toggle('hidden');
