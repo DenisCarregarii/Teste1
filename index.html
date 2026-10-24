@@ -63,11 +63,35 @@
     .fence-chip { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; background: rgba(15,23,42,.92); color: #fda4af; font-size: 10px; font-weight: 800; padding: 2px 8px; border-radius: 9999px; border: 1.5px solid #f43f5e; box-shadow: 0 2px 8px rgba(0,0,0,.5); cursor: pointer; }
     .sim-car { width: 34px; height: 34px; border-radius: 9999px; background: #f59e0b; border: 3px solid #fff; box-shadow: 0 4px 14px rgba(0,0,0,.6); display: flex; align-items: center; justify-content: center; color: #0f172a; }
 
-    .speed-tip.leaflet-tooltip { background: #0f172a; color: #fff; border: 1px solid #334155; border-radius: 10px; box-shadow: 0 6px 18px rgba(0,0,0,.5); padding: 6px 10px; font-family: 'Inter', sans-serif; font-size: 11px; line-height: 1.35; }
-    .speed-tip.leaflet-tooltip-top:before { border-top-color: #0f172a; }
-    .leaflet-popup-content-wrapper { background: #0f172a; color: #e2e8f0; border-radius: 14px; border: 1px solid #334155; }
-    .leaflet-popup-tip { background: #0f172a; }
-    .leaflet-popup-content { font-family: 'Inter', sans-serif; font-size: 12px; margin: 10px 12px; }
+    /* ---------- TOOLTIPS E POPUPS ESTILIZADOS ---------- */
+    .speed-tip.leaflet-tooltip { background: #0b1220; color: #fff; border: 1px solid #334155; border-radius: 14px; box-shadow: 0 10px 30px rgba(0,0,0,.55); padding: 8px 12px 8px 8px; font-family: 'Inter', sans-serif; font-size: 11px; line-height: 1.3; white-space: nowrap; }
+    .speed-tip.leaflet-tooltip-top:before { border-top-color: #334155; }
+    .tip-card { display: flex; align-items: center; gap: 10px; }
+    .tip-sign { width: 40px; height: 40px; border-radius: 9999px; background: #fff; border: 5px solid #f97316; color: #0f172a; font-weight: 900; font-size: 13px; display: flex; align-items: center; justify-content: center; flex: none; box-shadow: 0 2px 8px rgba(0,0,0,.4); }
+    .tip-ico { width: 40px; height: 40px; border-radius: 12px; display: flex; align-items: center; justify-content: center; flex: none; font-size: 15px; }
+    .tip-title { font-size: 13px; font-weight: 800; color: #fff; }
+    .tip-sub { font-size: 10px; color: #94a3b8; margin-top: 1px; }
+    .tip-chips { display: flex; gap: 4px; margin-top: 5px; flex-wrap: wrap; }
+    .chip { display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border-radius: 9999px; font-size: 9.5px; font-weight: 700; background: #1e293b; color: #cbd5e1; border: 1px solid #334155; }
+    .chip.amber { background: rgba(245,158,11,.15); color: #fcd34d; border-color: rgba(245,158,11,.4); }
+    .chip.rose { background: rgba(244,63,94,.15); color: #fda4af; border-color: rgba(244,63,94,.45); }
+    .chip.emerald { background: rgba(16,185,129,.15); color: #6ee7b7; border-color: rgba(16,185,129,.4); }
+    .chip.sky { background: rgba(14,165,233,.15); color: #7dd3fc; border-color: rgba(14,165,233,.4); }
+
+    .leaflet-popup-content-wrapper { background: #0b1220; color: #e2e8f0; border-radius: 18px; border: 1px solid #334155; box-shadow: 0 18px 40px rgba(0,0,0,.6); padding: 0; overflow: hidden; }
+    .leaflet-popup-content { margin: 0 !important; font-family: 'Inter', sans-serif; font-size: 12px; min-width: 220px; }
+    .leaflet-popup-tip { background: #0b1220; border: 1px solid #334155; }
+    .leaflet-container a.leaflet-popup-close-button { color: #94a3b8; top: 8px; right: 8px; font-size: 18px; width: 24px; height: 24px; line-height: 22px; border-radius: 8px; }
+    .leaflet-container a.leaflet-popup-close-button:hover { background: #1e293b; color: #fff; }
+    .pop-head { display: flex; align-items: center; gap: 10px; padding: 12px 36px 10px 12px; border-bottom: 1px solid #1e293b; background: linear-gradient(180deg, #111a2e, #0b1220); }
+    .pop-body { padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+    .pop-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 11px; color: #94a3b8; }
+    .pop-row b { color: #fff; font-weight: 800; }
+    .pop-actions { display: flex; gap: 6px; padding: 0 12px 12px; }
+    .pop-btn { flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 8px 10px; border-radius: 10px; font-size: 11px; font-weight: 700; color: #fff; cursor: pointer; transition: filter .15s, transform .1s; }
+    .pop-btn:hover { filter: brightness(1.15); }
+    .pop-btn:active { transform: scale(.96); }
+    .dot { width: 8px; height: 8px; border-radius: 9999px; display: inline-block; }
 
     .ind-btn { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding: 10px 4px; border-radius: 12px; background: #1e293b; border: 1px solid #334155; color: #e2e8f0; font-size: 11px; font-weight: 700; transition: transform .1s, background .15s; }
     .ind-btn:active { transform: scale(.95); }
@@ -290,6 +314,23 @@
 
   <div id="toastBox" class="fixed top-4 left-1/2 -translate-x-1/2 z-[70] flex flex-col gap-2 items-center pointer-events-none w-[92vw] max-w-md"></div>
 
+  <!-- DIÁLOGO PRÓPRIO (substitui alert/confirm do navegador) -->
+  <div id="dialogModal" class="hidden fixed inset-0 bg-black/75 backdrop-blur-sm z-[80] flex items-center justify-center p-3">
+    <div id="dialogBox" class="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden">
+      <div class="p-5 flex gap-3.5">
+        <div id="dialogIcon" class="w-11 h-11 rounded-xl flex items-center justify-center shrink-0 text-lg"></div>
+        <div class="min-w-0">
+          <h3 id="dialogTitle" class="font-bold text-sm text-white"></h3>
+          <p id="dialogMsg" class="text-xs text-slate-300 mt-1 whitespace-pre-line break-words"></p>
+        </div>
+      </div>
+      <div class="px-5 pb-4 flex justify-end gap-2">
+        <button id="dialogCancel" onclick="closeDialog(false)" class="hidden px-3.5 py-2 rounded-xl bg-slate-800 text-slate-300 text-xs font-semibold hover:bg-slate-700"></button>
+        <button id="dialogOk" onclick="closeDialog(true)" class="px-4 py-2 rounded-xl text-white font-bold text-xs"></button>
+      </div>
+    </div>
+  </div>
+
   <!-- MODAL: LIMITE DE VELOCIDADE DO TRECHO (PONTO A → PONTO B) -->
   <div id="speedModal" class="hidden fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-3">
     <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-xs p-5 flex flex-col gap-4 shadow-2xl">
@@ -342,7 +383,7 @@
         <button onclick="closeIndicationMenu(true)" class="w-7 h-7 rounded-lg bg-slate-800 text-slate-400 flex items-center justify-center"><i class="fa-solid fa-xmark text-xs"></i></button>
       </div>
 
-      <p class="text-[11px] text-slate-400">O navegador fala exatamente o que for marcado aqui. Marque no ponto onde a manobra começa.</p>
+      <p class="text-[11px] text-slate-400">Nada é automático: o navegador só fala as indicações que você marcar aqui. Pontos sem indicação ficam em silêncio. Marque no ponto onde a manobra começa.</p>
 
       <div class="grid grid-cols-3 gap-2">
         <button class="ind-btn" data-code="L" onclick="setIndication('L')"><i class="fa-solid fa-arrow-left text-base"></i>Esquerda</button>
@@ -363,10 +404,7 @@
         <div class="text-[10px] text-slate-500 mt-1">Conte a partir de onde entra, no sentido da circulação. A 1ª é a primeira à direita.</div>
       </div>
 
-      <div class="grid grid-cols-2 gap-2">
-        <button class="ind-btn" data-code="auto" onclick="setIndication('auto')"><i class="fa-solid fa-wand-magic-sparkles text-base"></i>Automático</button>
-        <button class="ind-btn" data-code="X" onclick="setIndication('X')"><i class="fa-solid fa-ban text-base"></i>Sem instrução</button>
-      </div>
+      <button class="ind-btn w-full" style="flex-direction:row;gap:8px" data-code="none" onclick="setIndication('none')"><i class="fa-solid fa-eraser text-sm"></i>Sem indicação neste ponto</button>
 
       <div class="flex items-center justify-between gap-2 pt-2 border-t border-slate-800">
         <button onclick="removeIndicatedPoint()" class="px-3 py-1.5 rounded-xl bg-rose-600/20 text-rose-300 border border-rose-500/40 text-xs font-bold flex items-center gap-1.5"><i class="fa-solid fa-trash-can"></i> Remover ponto</button>
@@ -487,6 +525,44 @@
       $('toastBox').appendChild(el);
       setTimeout(() => { el.style.transition = 'opacity .3s'; el.style.opacity = '0'; setTimeout(() => el.remove(), 320); }, ms);
     }
+
+    // Diálogos próprios (no lugar de alert/confirm do navegador)
+    let dialogResolve = null;
+    const DIALOG_THEME = {
+      error:   { ico: 'fa-circle-exclamation', icoCls: 'bg-rose-500/15 text-rose-400', btn: 'bg-rose-600 hover:bg-rose-500', border: 'border-rose-500/40' },
+      danger:  { ico: 'fa-trash-can', icoCls: 'bg-rose-500/15 text-rose-400', btn: 'bg-rose-600 hover:bg-rose-500', border: 'border-rose-500/40' },
+      warning: { ico: 'fa-triangle-exclamation', icoCls: 'bg-amber-500/15 text-amber-400', btn: 'bg-amber-600 hover:bg-amber-500', border: 'border-amber-500/40' },
+      success: { ico: 'fa-circle-check', icoCls: 'bg-emerald-500/15 text-emerald-400', btn: 'bg-emerald-600 hover:bg-emerald-500', border: 'border-emerald-500/40' },
+      info:    { ico: 'fa-circle-info', icoCls: 'bg-indigo-500/15 text-indigo-400', btn: 'bg-indigo-600 hover:bg-indigo-500', border: 'border-indigo-500/40' }
+    };
+    function uiDialog({ title, message, type = 'info', okText = 'OK', cancelText = null }) {
+      return new Promise(resolve => {
+        if (dialogResolve) dialogResolve(false);
+        const th = DIALOG_THEME[type] || DIALOG_THEME.info;
+        $('dialogBox').className = `bg-slate-900 border ${th.border} rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden`;
+        $('dialogIcon').className = `w-11 h-11 rounded-xl flex items-center justify-center shrink-0 text-lg ${th.icoCls}`;
+        $('dialogIcon').innerHTML = `<i class="fa-solid ${th.ico}"></i>`;
+        $('dialogTitle').innerText = title || 'Aviso';
+        $('dialogMsg').innerText = message || '';
+        const ok = $('dialogOk');
+        ok.innerText = okText;
+        ok.className = `px-4 py-2 rounded-xl text-white font-bold text-xs ${th.btn}`;
+        const c = $('dialogCancel');
+        c.classList.toggle('hidden', !cancelText);
+        c.innerText = cancelText || '';
+        dialogResolve = resolve;
+        $('dialogModal').classList.remove('hidden');
+        setTimeout(() => ok.focus(), 30);
+      });
+    }
+    function closeDialog(v) {
+      $('dialogModal').classList.add('hidden');
+      const r = dialogResolve; dialogResolve = null;
+      if (r) r(v);
+    }
+    const uiAlert = (message, type = 'error', title) => uiDialog({ title: title || (type === 'error' ? 'Algo deu errado' : 'Aviso'), message, type });
+    const uiConfirm = (message, title = 'Confirmar', okText = 'Confirmar', type = 'warning') => uiDialog({ title, message, type, okText, cancelText: 'Cancelar' });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape' && dialogResolve) closeDialog(false); });
 
     function distanceInMeters(lat1, lon1, lat2, lon2) {
       const R = 6371e3;
@@ -689,6 +765,9 @@
       return pr.c.distanceTo(pr.a) <= pr.c.distanceTo(pr.b) ? pr.i : pr.i + 1;
     }
 
+    // Só valem indicações marcadas à mão (L, R, U, O1..O6). Valores antigos como 'auto' ou 'X' são ignorados.
+    const isManeuver = c => c === 'L' || c === 'R' || c === 'U' || /^O[1-6]$/.test(c || '');
+
     function maneuverIconHtml(code) {
       if (code === 'L') return '<i class="fa-solid fa-arrow-left" style="font-size:12px"></i>';
       if (code === 'R') return '<i class="fa-solid fa-arrow-right" style="font-size:12px"></i>';
@@ -742,9 +821,11 @@
         }).addTo(routeSegmentsLayer);
 
         line.bindTooltip(
-          `<b style="font-size:13px">${r.limit} km/h</b> · ${r.type === 'unpaved' ? 'Terra / não pavimentado' : 'Asfalto'}<br>` +
-          `<span style="color:#94a3b8">Ponto ${r.a + 1} → ${r.b + 1} · ${fmtDist(r.dist)}</span>`,
-          { sticky: true, direction: 'top', className: 'speed-tip', opacity: 1 }
+          `<div class="tip-card"><div class="tip-sign" style="border-color:${color}">${r.limit}</div>` +
+          `<div><div class="tip-title">Limite ${r.limit} km/h</div><div class="tip-sub">Ponto ${r.a + 1} → ${r.b + 1}</div>` +
+          `<div class="tip-chips"><span class="chip">${fmtDist(r.dist)}</span>` +
+          `<span class="chip ${r.type === 'unpaved' ? 'amber' : 'sky'}">${r.type === 'unpaved' ? 'Terra / não pav.' : 'Asfalto'}</span></div></div></div>`,
+          { sticky: true, direction: 'top', className: 'speed-tip', opacity: 1, offset: [0, -8] }
         );
         line.on('mouseover', () => line.setStyle({ weight: 9 }));
         line.on('mouseout', () => line.setStyle({ weight: 6 }));
@@ -783,8 +864,8 @@
         let bg = isStart ? 'bg-emerald-500' : (isEnd ? 'bg-rose-500' : 'bg-indigo-600');
         let inner = String(i + 1), size = 26;
         const m = pt.maneuver;
-        if (appMode !== 'speed' && m && m !== 'auto' && !isStart && !isEnd) {
-          bg = m === 'X' ? 'bg-slate-500' : 'bg-orange-500';
+        if (appMode !== 'speed' && isManeuver(m) && !isEnd) {
+          bg = 'bg-orange-500';
           inner = maneuverIconHtml(m);
           size = m[0] === 'O' ? 34 : 30;
         }
@@ -974,14 +1055,14 @@
       if (!waypoints[i]) return;
       indIndex = i; indIsNew = !!isNew;
       $('indPointNum').innerText = i + 1;
-      const cur = waypoints[i].maneuver || 'auto';
+      const cur = isManeuver(waypoints[i].maneuver) ? waypoints[i].maneuver : 'none';
       document.querySelectorAll('#indicationModal [data-code]').forEach(b => b.classList.toggle('sel', b.dataset.code === cur));
       $('indicationModal').classList.remove('hidden');
     }
 
     function closeIndicationMenu(cancel) {
       $('indicationModal').classList.add('hidden');
-      if (cancel && indIsNew && indIndex !== null && waypoints[indIndex] && !waypoints[indIndex].maneuver) {
+      if (cancel && indIsNew && indIndex !== null && waypoints[indIndex] && !isManeuver(waypoints[indIndex].maneuver)) {
         waypoints.splice(indIndex, 1);
         refreshRouteVisuals();
       }
@@ -991,13 +1072,13 @@
     function setIndication(code) {
       const i = indIndex;
       if (i === null || !waypoints[i]) return;
-      if (code === 'auto') {
+      if (code === 'none') {
         delete waypoints[i].maneuver;
-        if (indIsNew) { indIsNew = true; closeIndicationMenu(true); return; }
+        if (indIsNew) { closeIndicationMenu(true); return; }
       } else {
         waypoints[i].maneuver = code;
       }
-      const label = code === 'auto' ? 'Automático' : (code === 'X' ? 'Sem instrução' : maneuverText(code));
+      const label = code === 'none' ? 'indicação removida' : maneuverText(code);
       indIsNew = false;
       closeIndicationMenu(false);
       refreshRouteVisuals();
@@ -1075,8 +1156,8 @@
       refreshRouteVisuals();
     }
 
-    function clearCurrentRoute(askIfLoaded) {
-      if (askIfLoaded && editingRouteId && !confirm('Limpar o trajeto da rota carregada? O que está salvo só muda se você salvar.')) return;
+    async function clearCurrentRoute(askIfLoaded) {
+      if (askIfLoaded && editingRouteId && !(await uiConfirm('Limpar o trajeto da rota carregada? O que está salvo só muda se você salvar.', 'Limpar trajeto', 'Limpar'))) return;
       waypoints = [];
       if (!askIfLoaded || !editingRouteId) {
         editingRouteId = null; routeLocked = false; routeSnapshot = null;
@@ -1120,38 +1201,50 @@
       btn.disabled = true;
       labelEl.innerText = 'A processar...';
 
+      // envia JSON e devolve sempre {ok, status, data, text} (sem lançar erro)
+      const send = async (method, url, payload) => {
+        try {
+          const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: payload ? JSON.stringify(payload) : undefined });
+          const text = await res.text().catch(() => '');
+          let data = null; try { data = JSON.parse(text); } catch (e) {}
+          return { ok: res.ok, status: res.status, data, text };
+        } catch (e) {
+          return { ok: false, status: 0, data: null, text: 'sem conexão com o servidor' };
+        }
+      };
+      const why = r => {
+        const msg = r.data && (r.data.erro || r.data.error || r.data.message || r.data.detail);
+        return `${msg || (r.text || '').replace(/<[^>]+>/g, ' ').trim().slice(0, 160) || 'sem detalhes do servidor'} (HTTP ${r.status || 'sem resposta'})`;
+      };
+
       try {
         const isUpdate = !!editingRouteId;
-        const url = isUpdate ? `${API_BASE_URL}/routes/${editingRouteId}` : `${API_BASE_URL}/routes`;
-        const res = await fetch(url, {
-          method: isUpdate ? 'PUT' : 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ company_id: sessionUser.company_id, name, distance_meters: totalRouteDistanceMeters, waypoints })
-        });
-        const data = await res.json().catch(() => null);
-        if (!res.ok) {
-          alert('Erro ao guardar no banco: ' + ((data && data.erro) || 'Falha de comunicação'));
+        const payload = { company_id: sessionUser.company_id, name, distance_meters: totalRouteDistanceMeters, waypoints };
+        let r = await send(isUpdate ? 'PUT' : 'POST', isUpdate ? `${API_BASE_URL}/routes/${editingRouteId}` : `${API_BASE_URL}/routes`, payload);
+
+        // Plano B: se o servidor recusar o PUT (ex.: rota de atualização inexistente), grava como nova e remove a antiga
+        if (isUpdate && !r.ok && r.status !== 0 && r.status !== 401 && r.status !== 403) {
+          const putErr = why(r);
+          const created = await send('POST', `${API_BASE_URL}/routes`, payload);
+          if (created.ok) {
+            const del = await send('DELETE', `${API_BASE_URL}/routes/${editingRouteId}`);
+            if (!del.ok) notify('Rota salva, mas a versão antiga não pôde ser removida. Apague-a em Rotas guardadas.', 'warning', 5000);
+            r = created;
+          } else {
+            await uiAlert(`Não foi possível salvar as alterações.\n\nAtualizar: ${putErr}\nSalvar como nova: ${why(created)}`, 'error', 'Erro ao salvar alterações');
+            return;
+          }
+        }
+        if (!r.ok) {
+          await uiAlert(`Não foi possível guardar a rota.\n\n${why(r)}`, 'error', 'Erro ao guardar rota');
           return;
         }
 
         closeSaveModal();
-        const newId = isUpdate ? editingRouteId : (data && (data.id || (data.route && data.route.id) || (data.rota && data.rota.id)));
-        await fetchRoutesFromDatabase();
         notify(isUpdate ? `Rota "${name}" atualizada!` : `Rota "${name}" guardada!`, 'success');
-
-        if (newId) {
-          editingRouteId = newId;
-          routeSnapshot = clone(waypoints);
-          routeLocked = true;
-          setIndicatorPlacing(false);
-          resetSpeedPick(false);
-          renderRouteBanner();
-          refreshRouteVisuals();
-        } else {
-          clearCurrentRoute(false);
-        }
-      } catch (e) {
-        alert('Erro de conexão ao comunicar com a API na nuvem.');
+        // rota salva: limpa o mapa para começar uma nova
+        clearCurrentRoute(false);
+        await fetchRoutesFromDatabase();
       } finally {
         btn.disabled = false;
         labelEl.innerText = oldLabel;
@@ -1211,7 +1304,7 @@
     }
 
     async function deleteRoute(id) {
-      if (!confirm('Deseja realmente eliminar esta rota do banco de dados?')) return;
+      if (!(await uiConfirm('Esta rota será eliminada do banco de dados e não poderá ser recuperada.', 'Excluir rota', 'Excluir', 'danger'))) return;
       try { await fetch(`${API_BASE_URL}/routes/${id}`, { method: 'DELETE' }); } catch (e) {}
       if (String(editingRouteId) === String(id)) clearCurrentRoute(false);
       fetchRoutesFromDatabase();
@@ -1395,14 +1488,18 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ company_id: sessionUser.company_id, name, speed_limit_kmh: speed, points: fenceDraft.points })
         });
-        if (!res.ok) { alert('O servidor não aceitou salvar a cerca.'); return; }
+        if (!res.ok) {
+          const t = await res.text().catch(() => '');
+          await uiAlert(`O servidor não aceitou salvar a cerca (HTTP ${res.status}).${t ? '\n\n' + t.replace(/<[^>]+>/g, ' ').trim().slice(0, 160) : ''}`, 'error', 'Erro ao salvar cerca');
+          return;
+        }
         closeSaveFenceModal();
         notify(editing ? 'Cerca atualizada' : 'Cerca guardada', 'success');
         clearCurrentFenceDraft();
         $('fenceNameInput').value = '';
         loadFencesData();
       } catch (e) {
-        alert('Erro de conexão ao salvar a cerca.');
+        await uiAlert('Sem conexão com o servidor ao salvar a cerca.', 'error', 'Erro de conexão');
       } finally {
         btn.disabled = false;
       }
@@ -1421,14 +1518,22 @@
         if (pts.length < 3) return;
         const limit = f.speed_limit_kmh || f.speed_limit || '—';
         const poly = L.polygon(pts.map(p => [p.lat, p.lng]), { color: '#f43f5e', weight: 2, fillColor: '#f43f5e', fillOpacity: 0.18 }).addTo(savedFencesLayer);
-        poly.bindTooltip(`<b>${esc(f.name || 'Cerca')}</b><br>Máx ${esc(limit)} km/h`, { sticky: true, className: 'speed-tip', opacity: 1 });
+        poly.bindTooltip(
+          `<div class="tip-card"><div class="tip-ico" style="background:rgba(244,63,94,.18);color:#fb7185"><i class="fa-solid fa-draw-polygon"></i></div>` +
+          `<div><div class="tip-title">${esc(f.name || 'Cerca')}</div><div class="tip-sub">Cerca virtual</div>` +
+          `<div class="tip-chips"><span class="chip rose">Máx ${esc(limit)} km/h</span></div></div></div>`,
+          { sticky: true, className: 'speed-tip', opacity: 1, offset: [0, -8] }
+        );
 
         const cLat = pts.reduce((s, p) => s + p.lat, 0) / pts.length, cLng = pts.reduce((s, p) => s + p.lng, 0) / pts.length;
         const chip = L.marker([cLat, cLng], { icon: L.divIcon({ html: `<div class="fence-chip"><i class="fa-solid fa-draw-polygon"></i>${esc(limit)}</div>`, className: '', iconSize: [64, 20], iconAnchor: [32, 10] }), zIndexOffset: 300 }).addTo(savedFencesLayer);
         chip.bindPopup(
-          `<div class="font-bold text-white mb-0.5">${esc(f.name || 'Cerca')}</div><div class="text-slate-400 mb-2">Máx ${esc(limit)} km/h</div>` +
-          `<div class="flex gap-1.5"><button onclick="editSavedFence('${esc(f.id)}')" class="px-2.5 py-1 rounded-lg bg-indigo-600 text-white text-[11px] font-bold">Editar</button>` +
-          `<button onclick="deleteSavedFence('${esc(f.id)}')" class="px-2.5 py-1 rounded-lg bg-rose-600 text-white text-[11px] font-bold">Excluir</button></div>`
+          `<div class="pop-head"><div class="tip-ico" style="background:rgba(244,63,94,.18);color:#fb7185"><i class="fa-solid fa-draw-polygon"></i></div>` +
+          `<div class="min-w-0"><div class="tip-title">${esc(f.name || 'Cerca')}</div><div class="tip-sub">Cerca virtual · ${pts.length} vértices</div></div></div>` +
+          `<div class="pop-body"><div class="pop-row">Velocidade máxima<span class="chip rose" style="font-size:12px;padding:2px 10px">${esc(limit)} km/h</span></div></div>` +
+          `<div class="pop-actions"><button class="pop-btn" style="background:#4f46e5" onclick="editSavedFence('${esc(f.id)}')"><i class="fa-solid fa-pen-to-square"></i>Editar</button>` +
+          `<button class="pop-btn" style="background:#e11d48" onclick="deleteSavedFence('${esc(f.id)}')"><i class="fa-solid fa-trash-can"></i>Excluir</button></div>`,
+          { closeButton: true, minWidth: 220 }
         );
       });
     }
@@ -1448,12 +1553,12 @@
 
     async function deleteSavedFence(id) {
       map.closePopup();
-      if (!confirm('Excluir esta cerca?')) return;
+      if (!(await uiConfirm('Esta cerca virtual será excluída.', 'Excluir cerca', 'Excluir', 'danger'))) return;
       try {
         const res = await fetch(`${API_BASE_URL}/fences/${id}`, { method: 'DELETE' });
-        if (!res.ok) { alert('O servidor não aceitou excluir a cerca.'); return; }
+        if (!res.ok) { await uiAlert(`O servidor não aceitou excluir a cerca (HTTP ${res.status}).`, 'error', 'Erro ao excluir'); return; }
         notify('Cerca excluída', 'success');
-      } catch (e) { alert('Erro de conexão.'); }
+      } catch (e) { await uiAlert('Sem conexão com o servidor.', 'error', 'Erro de conexão'); }
       loadFencesData();
     }
 
@@ -1468,19 +1573,10 @@
       for (let i = 1; i < n; i++) sim.s[i] = sim.s[i - 1] + distanceInMeters(waypoints[i - 1].lat, waypoints[i - 1].lng, waypoints[i].lat, waypoints[i].lng);
       sim.total = sim.s[n - 1] || 0;
       sim.events = [];
+      // somente indicações marcadas manualmente
       for (let i = 0; i < n - 1; i++) {
-        let code = waypoints[i].maneuver;
-        if (code === 'X') continue;
-        if (!code || code === 'auto') {
-          if (i === 0) continue;
-          const t = signedTurn(
-            calculateBearing(waypoints[i - 1].lat, waypoints[i - 1].lng, waypoints[i].lat, waypoints[i].lng),
-            calculateBearing(waypoints[i].lat, waypoints[i].lng, waypoints[i + 1].lat, waypoints[i + 1].lng)
-          );
-          if (Math.abs(t) >= 165) code = 'U';
-          else if (Math.abs(t) >= 50) code = t > 0 ? 'R' : 'L';
-          else continue;
-        }
+        const code = waypoints[i].maneuver;
+        if (!isManeuver(code)) continue;
         sim.events.push({ at: sim.s[i], code, text: maneuverText(code), idx: i });
       }
     }
@@ -1681,7 +1777,13 @@
             </div>
           `;
           L.marker([u.latitude, u.longitude], { icon: L.divIcon({ html, className: '', iconSize: [90, 50], iconAnchor: [45, 50] }) })
-            .bindPopup(`<b>${esc(u.name)}</b><br>Velocidade: ${esc(u.speed_kmh)} km/h<br>Sinal: há ${Math.round(u.seconds_ago)}s`)
+            .bindPopup(
+              `<div class="pop-head"><div class="tip-ico" style="background:rgba(245,158,11,.18);color:#fbbf24"><i class="fa-solid fa-truck"></i></div>` +
+              `<div class="min-w-0"><div class="tip-title">${esc(u.name)}</div><div class="tip-sub">${isOnline ? 'Veículo ativo' : 'Sem sinal recente'}</div></div></div>` +
+              `<div class="pop-body"><div class="pop-row">Velocidade<b>${esc(u.speed_kmh)} km/h</b></div>` +
+              `<div class="pop-row">Último sinal<span class="chip ${isOnline ? 'emerald' : ''}"><span class="dot" style="background:${isOnline ? '#34d399' : '#64748b'}"></span>há ${Math.round(u.seconds_ago)}s</span></div></div>`,
+              { closeButton: true, minWidth: 220 }
+            )
             .addTo(trackingLayer);
         });
 
