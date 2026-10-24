@@ -3,85 +3,98 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>GeoNav - Acesso Multi-Empresas</title>
+  <title>GeoNav - Acesso ao Sistema</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <style> body { font-family: 'Inter', sans-serif; } </style>
+  <style>
+    body { font-family: 'Inter', sans-serif; }
+  </style>
 </head>
 <body class="bg-slate-950 text-slate-100 h-full flex items-center justify-center p-4">
 
+  <!-- CARD PRINCIPAL DE LOGIN -->
   <div class="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 w-full max-w-sm shadow-2xl flex flex-col gap-5">
     <div class="flex flex-col items-center text-center gap-2">
       <div class="w-14 h-14 rounded-2xl bg-indigo-600 flex items-center justify-center text-white text-2xl shadow-lg shadow-indigo-600/30">
         <i class="fa-solid fa-truck-moving"></i>
       </div>
       <h1 class="text-xl font-black text-white">GeoNav Enterprise</h1>
-      <p class="text-xs text-slate-400">Selecione a empresa e o veículo de frota</p>
+      <p class="text-xs text-slate-400">Identifique-se para acessar o sistema</p>
     </div>
 
     <form id="loginForm" onsubmit="handleLogin(event)" class="space-y-3.5">
-      <!-- 1. SELETOR DE EMPRESA -->
+      <!-- 1. EMPRESA -->
       <div>
         <label class="text-xs font-semibold text-slate-400 block mb-1">Empresa</label>
-        <select id="companySelect" required onchange="updateFleetOptions()" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500 cursor-pointer">
+        <select id="companySelect" required class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500 cursor-pointer">
           <option value="1">Alpha</option>
           <option value="2">Beta</option>
           <option value="3">Omega</option>
         </select>
       </div>
 
-      <!-- 2. SELETOR DE NÚMERO DE FROTA -->
-      <div id="fleetContainer">
-        <label class="text-xs font-semibold text-slate-400 block mb-1 flex items-center justify-between">
-          <span>Veículo / Frota</span>
-          <span class="text-[10px] text-amber-400 font-mono" id="fleetHint"></span>
-        </label>
-        <select id="fleetSelect" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500 cursor-pointer">
-          <!-- preenchido dinamicamente via JavaScript -->
+      <!-- 2. PERFIL -->
+      <div>
+        <label class="text-xs font-semibold text-slate-400 block mb-1">Perfil</label>
+        <select id="roleSelect" required class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500 cursor-pointer font-medium">
+          <option value="admin">Administrador</option>
+          <option value="motorista">Motorista</option>
         </select>
       </div>
 
-      <!-- 3. USUÁRIO -->
+      <!-- 3. SENHA -->
       <div>
-        <label class="text-xs font-semibold text-slate-400 block mb-1">Usuário</label>
-        <input id="userInput" type="text" required placeholder="admin ou motorista" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500">
-      </div>
-
-      <!-- 4. SENHA -->
-      <div>
-        <label class="text-xs font-semibold text-slate-400 block mb-1">Senha</label>
+        <label class="text-xs font-semibold text-slate-400 block mb-1">Senha de Acesso</label>
         <input id="passInput" type="password" required placeholder="••••" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500">
       </div>
 
       <button id="btnSubmit" type="submit" class="w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 font-bold text-sm text-white shadow-lg transition active:scale-95 mt-1">
-        Entrar
+        Entrar no Sistema
       </button>
 
       <div id="loginMsg" class="hidden text-center text-xs text-rose-400 font-semibold p-2 rounded-lg bg-rose-500/10 border border-rose-500/20"></div>
     </form>
     
-    <!-- INFORMAÇÕES DE TESTE -->
     <div class="text-[11px] text-slate-400 border-t border-slate-800 pt-3 flex flex-col gap-1.5">
-      <span class="font-bold text-slate-300">Acessos Padrão (Senha: 1234):</span>
       <div class="flex justify-between items-center bg-slate-800/60 p-2 rounded-lg border border-slate-700/50">
-        <div>
-          <span class="font-bold text-white block">Editor (Gestor)</span>
-          <span class="text-slate-400">Usuário: <code class="text-indigo-400 font-bold">admin</code></span>
+        <span class="text-slate-300">Senha padrão:</span>
+        <code class="text-white font-mono bg-slate-700 px-2 py-0.5 rounded font-bold">1234</code>
+      </div>
+    </div>
+  </div>
+
+  <!-- 🚚 MODAL POP-UP: SELEÇÃO PRIVADA DE FROTA (SÓ ABRE APÓS AUTENTICAR MOTORISTA) -->
+  <div id="fleetModal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-sm p-6 flex flex-col gap-4 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+      
+      <div class="flex items-center gap-3 border-b border-slate-800 pb-3">
+        <div class="w-11 h-11 rounded-2xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center text-lg shrink-0">
+          <i class="fa-solid fa-truck"></i>
         </div>
-        <div class="text-right">
-          <code class="text-white font-mono bg-slate-700 px-1.5 py-0.5 rounded">1234</code>
+        <div>
+          <h3 class="font-bold text-sm text-white">Identificação do Veículo</h3>
+          <p class="text-[11px] text-slate-400" id="fleetModalCompany">Empresa</p>
         </div>
       </div>
-      <div class="flex justify-between items-center bg-slate-800/60 p-2 rounded-lg border border-slate-700/50">
-        <div>
-          <span class="font-bold text-white block">Navegador (Motorista)</span>
-          <span class="text-slate-400">Usuário: <code class="text-emerald-400 font-bold">motorista</code></span>
-        </div>
-        <div class="text-right">
-          <code class="text-white font-mono bg-slate-700 px-1.5 py-0.5 rounded">1234</code>
-        </div>
+
+      <div>
+        <label class="text-xs font-semibold text-slate-300 block mb-1.5">Qual veículo você vai operar hoje?</label>
+        <select id="fleetSelect" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3.5 py-3 text-sm text-white focus:outline-none focus:border-emerald-500 cursor-pointer font-bold">
+          <!-- Opções preenchidas conforme a empresa logada -->
+        </select>
+        <span class="text-[10px] text-slate-400 mt-1 block">Este número identificará sua posição no monitoramento do gestor.</span>
+      </div>
+
+      <div class="flex items-center gap-2 pt-2 border-t border-slate-800">
+        <button onclick="cancelFleetModal()" class="w-1/3 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs transition">
+          Voltar
+        </button>
+        <button onclick="confirmFleetAndGo()" class="w-2/3 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-lg shadow-emerald-600/30 flex items-center justify-center gap-1.5 transition active:scale-95">
+          <span>Abrir Navegação</span>
+          <i class="fa-solid fa-arrow-right text-xs"></i>
+        </button>
       </div>
     </div>
   </div>
@@ -89,26 +102,16 @@
   <script>
     const API_BASE_URL = 'https://teste1-p5pw.onrender.com/api';
 
-    // Lista de frotas por empresa solicitada
+    // Frotas isoladas por organização
     const FLEET_DATA = {
       '1': ['1000', '1100', '1200', '1300', '1400', '1500', '1600'], // Alpha
       '2': ['2000', '2100', '2200', '2300', '2400', '2500'],         // Beta
       '3': ['3000', '3100', '3200', '3300', '3400', '3500']          // Omega
     };
 
-    function updateFleetOptions() {
-      const compId = document.getElementById('companySelect').value;
-      const fleetSelect = document.getElementById('fleetSelect');
-      const fleets = FLEET_DATA[compId] || [];
-      
-      fleetSelect.innerHTML = fleets.map(f => `<option value="${f}">Veículo Frota ${f}</option>`).join('');
-    }
+    let authenticatedUser = null;
 
     window.addEventListener('load', async () => {
-      // Atualiza frotas inicialmente
-      updateFleetOptions();
-
-      // Tenta sincronizar nomes do banco se houver
       try {
         const res = await fetch(`${API_BASE_URL}/companies`);
         if (res.ok) {
@@ -116,7 +119,6 @@
           if (companies.length) {
             const sel = document.getElementById('companySelect');
             sel.innerHTML = companies.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
-            updateFleetOptions();
           }
         }
       } catch (e) {}
@@ -132,8 +134,8 @@
       btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> A verificar...';
 
       const company_id = document.getElementById('companySelect').value;
-      const fleet_num = document.getElementById('fleetSelect').value;
-      const username = document.getElementById('userInput').value.trim();
+      const role = document.getElementById('roleSelect').value;
+      const username = role;
       const password = document.getElementById('passInput').value.trim();
 
       try {
@@ -145,20 +147,19 @@
         const data = await res.json();
 
         if (res.ok && data.user) {
-          // Anexa o número da frota selecionado à sessão do usuário
-          data.user.fleet = fleet_num;
-          if (data.user.role === 'navegador') {
-            data.user.name = `Veículo ${fleet_num} (${data.user.company_name || 'Frota'})`;
-          }
+          authenticatedUser = data.user;
 
-          localStorage.setItem('geonav_session', JSON.stringify(data.user));
           if (data.user.role === 'editor') {
+            // Se for administrador: entra direto
+            data.user.fleet = null;
+            localStorage.setItem('geonav_session', JSON.stringify(data.user));
             window.location.href = 'index.html';
           } else {
-            window.location.href = 'index_gps.html';
+            // Se for motorista: abre o pop-up de seleção de frota daquela empresa
+            openFleetModal(company_id, data.user.company_name);
           }
         } else {
-          msg.innerText = data.erro || 'Utilizador ou palavra-passe incorretos.';
+          msg.innerText = data.erro || 'Palavra-passe incorreta.';
           msg.classList.remove('hidden');
         }
       } catch (err) {
@@ -166,8 +167,34 @@
         msg.classList.remove('hidden');
       } finally {
         btn.disabled = false;
-        btn.innerText = 'Entrar';
+        btn.innerText = 'Entrar no Sistema';
       }
+    }
+
+    // Abre o pop-up com as frotas restritas à empresa logada
+    function openFleetModal(companyId, companyName) {
+      const fleetSelect = document.getElementById('fleetSelect');
+      const fleets = FLEET_DATA[companyId] || [];
+      
+      fleetSelect.innerHTML = fleets.map(f => `<option value="${f}">Veículo de Frota ${f}</option>`).join('');
+      document.getElementById('fleetModalCompany').innerText = `Frota ativa da ${companyName || 'Organização'}`;
+      document.getElementById('fleetModal').classList.remove('hidden');
+    }
+
+    function cancelFleetModal() {
+      document.getElementById('fleetModal').classList.add('hidden');
+      authenticatedUser = null;
+    }
+
+    function confirmFleetAndGo() {
+      if (!authenticatedUser) return;
+      const fleet_num = document.getElementById('fleetSelect').value;
+      
+      authenticatedUser.fleet = fleet_num;
+      authenticatedUser.name = `Veículo ${fleet_num} (${authenticatedUser.company_name || 'Frota'})`;
+      
+      localStorage.setItem('geonav_session', JSON.stringify(authenticatedUser));
+      window.location.href = 'index_gps.html';
     }
   </script>
 </body>
