@@ -298,7 +298,7 @@
     </div>
 
     <!-- PAINEL INFERIOR: TRAÇADO E VELOCIDADE (OCULTO NO MODO MONITORAMENTO) -->
-    <div id="editToolbar" class="absolute bottom-4 left-3 right-3 md:left-1/2 md:-translate-x-1/2 md:w-[860px] md:right-auto bg-slate-900/95 backdrop-blur-md rounded-2xl border border-slate-800 shadow-2xl p-3 z-20 flex flex-col lg:flex-row items-center justify-between gap-2.5">
+    <div id="editToolbar" class="hidden absolute bottom-4 left-3 right-3 md:left-1/2 md:-translate-x-1/2 md:w-[860px] md:right-auto bg-slate-900/95 backdrop-blur-md rounded-2xl border border-slate-800 shadow-2xl p-3 z-20 flex flex-col lg:flex-row items-center justify-between gap-2.5">
       <div class="flex items-center gap-3 text-xs w-full lg:w-auto justify-between lg:justify-start">
         <span id="routePointsCount" class="font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-lg border border-emerald-500/20">0 pontos</span>
         <span class="text-slate-600">|</span>
@@ -307,6 +307,9 @@
       </div>
 
       <div class="flex items-center gap-2 w-full lg:w-auto justify-end flex-wrap">
+        <button onclick="closeDrawingTools()" title="Parar de usar a ferramenta de desenho" class="tb-btn bg-slate-800 text-slate-200 hover:bg-slate-700 border-slate-600">
+          <i class="fa-solid fa-xmark"></i><span>Cancelar</span>
+        </button>
         <button id="btnUndo" onclick="undoLastWaypoint()" title="Remover último ponto" class="tb-btn bg-slate-800 text-slate-300 hover:bg-slate-700 border-slate-700">
           <i class="fa-solid fa-rotate-left"></i><span>Desfazer</span>
         </button>
@@ -338,6 +341,7 @@
         <span id="fenceHint" class="text-[11px] text-rose-200">Clique no mapa para marcar os vértices</span>
       </div>
       <div class="flex items-center gap-2 justify-end">
+        <button onclick="closeDrawingTools()" title="Parar de usar a ferramenta de cerca" class="tb-btn bg-slate-800 text-slate-200 hover:bg-slate-700 border-slate-600"><i class="fa-solid fa-xmark"></i><span>Cancelar</span></button>
         <button onclick="undoFenceStep()" class="tb-btn bg-slate-800 text-slate-300 hover:bg-slate-700 border-slate-700"><i class="fa-solid fa-rotate-left"></i><span>Desfazer</span></button>
         <button onclick="clearCurrentFenceDraft()" class="tb-btn bg-slate-800 text-slate-300 hover:bg-slate-700 border-slate-700"><i class="fa-solid fa-trash-can"></i><span>Limpar</span></button>
         <button onclick="openSaveFenceModal()" class="tb-btn bg-rose-600 hover:bg-rose-500 text-white font-bold shadow"><i class="fa-solid fa-check"></i><span id="fenceSaveLabel">Guardar Cerca</span></button>
@@ -644,11 +648,11 @@
       if (!SESSION_OK) return;
       initMap();
       toggleDrawGroup(); toggleDrawGroup();
-      setAppMode('edit');
+      setAppMode('idle');
       fetchRoutesFromDatabase();
       loadFencesData();
       fetchActiveUsers();
-      setInterval(fetchActiveUsers, 4000);
+      setInterval(() => { if (appMode === 'tracking') fetchActiveUsers(); }, 4000);
     });
 
     // MAPA COM SATÉLITE E CAMADAS HÍBRIDAS
@@ -748,18 +752,29 @@
       if (mode === 'fence') refreshActiveFenceVisuals();
       else activeFenceLayer.clearLayers();
 
-      if (mode === 'tracking') {
-        fetchActiveUsers();
-      }
+      if (mode === 'tracking') fetchActiveUsers();
+      renderTrackingMarkers();
 
       updateSpeedGuide();
       updateToolbarState();
       refreshRouteVisuals();
     }
 
+    // Fecha a ferramenta de desenho (traçado / velocidade / cerca) e esconde a barra inferior
+    function closeDrawingTools() {
+      if (appMode === 'fence') {
+        clearCurrentFenceDraft();
+      } else if (editingRouteId && !routeLocked) {
+        if (!confirm('Parar a edição? As alterações não salvas desta rota serão descartadas.')) return;
+        cancelEditingRoute();
+      }
+      closeIndicationMenu(false);
+      setAppMode('idle');
+    }
+
     function toggleTrackingSidebar() {
       if (appMode === 'tracking') {
-        setAppMode('edit');
+        setAppMode('idle');
       } else {
         hasAutoCenteredTracking = false;
         setAppMode('tracking');
@@ -1154,8 +1169,8 @@
 
     function enableRouteEditing() {
       routeLocked = false;
+      setAppMode('edit');
       renderRouteBanner();
-      refreshRouteVisuals();
       notify('Edição liberada. Salve ao terminar.', 'success');
     }
 
@@ -1165,8 +1180,8 @@
       routeLocked = true;
       setIndicatorPlacing(false);
       resetSpeedPick(false);
+      setAppMode('idle');
       renderRouteBanner();
-      refreshRouteVisuals();
     }
 
     function undoLastWaypoint() {
@@ -1218,6 +1233,7 @@
         closeSaveModal();
         notify(`Rota "${name}" guardada com sucesso!`, 'success');
         clearCurrentRoute(false);
+        setAppMode('idle');
         fetchRoutesFromDatabase();
       } catch (e) {
         notify('Erro ao salvar rota no banco.', 'error');
@@ -1255,7 +1271,7 @@
       routeLocked = !startEditing;
       $('routeNameInput').value = r.name || '';
       $('routeManagerModal').classList.add('hidden');
-      setAppMode('edit');
+      setAppMode(startEditing ? 'edit' : 'idle');
       renderRouteBanner();
       fitRouteBounds();
     }
@@ -1371,21 +1387,44 @@
       } catch (e) {}
     }
 
-    // SIMULAÇÃO DA ROTA
-    const sim = { open: false, playing: false, dist: 0, factor: 4, follow: true, voice: true, total: 0, s: [], events: [], said: new Set(), speed: 0, raf: 0, last: 0, marker: null };
+    // SIMULAÇÃO DA ROTA (velocidade pelo limite do trecho/cerca, indicações e voz)
+    const sim = { open: false, playing: false, dist: 0, factor: 4, follow: true, voice: true, total: 0, s: [], events: [], said: new Set(), speed: 0, raf: 0, last: 0, marker: null, heading: 0, endSaid: false };
+
+    function speakSim(text) {
+      if (!sim.voice || !('speechSynthesis' in window)) return;
+      try {
+        window.speechSynthesis.cancel();
+        const u = new SpeechSynthesisUtterance(text);
+        u.lang = 'pt-BR'; u.rate = 1.05;
+        window.speechSynthesis.speak(u);
+      } catch (e) {}
+    }
 
     function simBuild() {
       sim.s = [0];
-      for (let i = 1; i < waypoints.length; i++) sim.s[i] = sim.s[i-1] + distanceInMeters(waypoints[i-1].lat, waypoints[i-1].lng, waypoints[i].lat, waypoints[i].lng);
+      for (let i = 1; i < waypoints.length; i++) sim.s[i] = sim.s[i - 1] + distanceInMeters(waypoints[i - 1].lat, waypoints[i - 1].lng, waypoints[i].lat, waypoints[i].lng);
       sim.total = sim.s[waypoints.length - 1] || 0;
+      sim.events = [];
+      waypoints.forEach((w, i) => { if (isManeuver(w.maneuver) && i < waypoints.length - 1) sim.events.push({ i, d: sim.s[i], code: w.maneuver }); });
     }
     function simRebuild() { simBuild(); }
 
+    function simUpdateButtons() {
+      const on = 'bg-sky-600/30 text-sky-300 border border-sky-500/40', off = 'bg-slate-800 text-slate-500 border border-slate-700';
+      $('simFollowBtn').className = 'w-9 h-9 rounded-xl flex items-center justify-center ' + (sim.follow ? on : off);
+      $('simVoiceBtn').className = 'w-9 h-9 rounded-xl flex items-center justify-center ' + (sim.voice ? on : off);
+      $('simVoiceBtn').innerHTML = `<i class="fa-solid ${sim.voice ? 'fa-volume-high' : 'fa-volume-xmark'} text-xs"></i>`;
+      $('simPlayBtn').innerHTML = sim.playing ? '<i class="fa-solid fa-pause"></i><span>Pausar</span>' : '<i class="fa-solid fa-play"></i><span>Continuar</span>';
+    }
+
     function openSimulation() {
-      if (waypoints.length < 2) return;
+      if (waypoints.length < 2) { notify('Desenhe a rota primeiro (mínimo 2 pontos).', 'warning'); return; }
+      if (sim.open) closeSimulation();
       simBuild();
-      sim.open = true; sim.dist = 0; sim.speed = 0; sim.playing = true;
+      sim.open = true; sim.dist = 0; sim.speed = 0; sim.playing = true; sim.said = new Set(); sim.endSaid = false;
       $('simPanel').classList.remove('hidden');
+      simUpdateButtons();
+      speakSim('Iniciando simulação da rota.');
       sim.last = performance.now();
       sim.raf = requestAnimationFrame(simTick);
     }
@@ -1393,39 +1432,113 @@
     function closeSimulation() {
       sim.open = false; sim.playing = false;
       cancelAnimationFrame(sim.raf);
+      try { window.speechSynthesis && window.speechSynthesis.cancel(); } catch (e) {}
       simLayer.clearLayers(); sim.marker = null;
       $('simPanel').classList.add('hidden');
     }
 
-    function simTogglePlay() { sim.playing = !sim.playing; if (sim.playing) { sim.last = performance.now(); sim.raf = requestAnimationFrame(simTick); } }
-    function simRestart() { sim.dist = 0; sim.speed = 0; sim.playing = true; sim.last = performance.now(); sim.raf = requestAnimationFrame(simTick); }
-    function simCycleFactor() { const f = [1, 2, 4, 8]; sim.factor = f[(f.indexOf(sim.factor)+1)%f.length]; $('simFactorBtn').innerText = sim.factor + 'x'; }
-    function simToggleFollow() { sim.follow = !sim.follow; }
-    function simToggleVoice() { sim.voice = !sim.voice; }
+    function simTogglePlay() {
+      sim.playing = !sim.playing;
+      if (sim.playing) { sim.last = performance.now(); cancelAnimationFrame(sim.raf); sim.raf = requestAnimationFrame(simTick); }
+      else { try { window.speechSynthesis && window.speechSynthesis.cancel(); } catch (e) {} }
+      simUpdateButtons();
+    }
+    function simRestart() {
+      cancelAnimationFrame(sim.raf);
+      sim.dist = 0; sim.speed = 0; sim.playing = true; sim.said = new Set(); sim.endSaid = false;
+      sim.last = performance.now();
+      simUpdateButtons();
+      speakSim('Reiniciando simulação.');
+      sim.raf = requestAnimationFrame(simTick);
+    }
+    function simCycleFactor() { const f = [1, 2, 4, 8]; sim.factor = f[(f.indexOf(sim.factor) + 1) % f.length]; $('simFactorBtn').innerText = sim.factor + 'x'; }
+    function simToggleFollow() { sim.follow = !sim.follow; simUpdateButtons(); }
+    function simToggleVoice() {
+      sim.voice = !sim.voice;
+      if (!sim.voice) { try { window.speechSynthesis && window.speechSynthesis.cancel(); } catch (e) {} }
+      simUpdateButtons();
+    }
+
+    function simNextEvent() { return sim.events.find(ev => ev.d > sim.dist - 1) || null; }
 
     function simTick(ts) {
       if (!sim.open || !sim.playing) return;
       const dt = Math.min(0.1, (ts - sim.last) / 1000); sim.last = ts;
-      sim.speed = 60;
-      sim.dist = Math.min(sim.total, sim.dist + ((sim.speed / 3.6) * dt * sim.factor));
 
-      let seg = 0;
-      for (let i = 0; i < sim.s.length - 1; i++) if (sim.dist <= sim.s[i+1]) { seg = i; break; }
-      const a = waypoints[seg], b = waypoints[seg+1] || a;
-      const t = Math.min(1, Math.max(0, (sim.dist - sim.s[seg]) / (sim.s[seg+1] - sim.s[seg] || 1)));
+      let seg = waypoints.length - 2;
+      for (let i = 0; i < sim.s.length - 1; i++) if (sim.dist <= sim.s[i + 1]) { seg = i; break; }
+      seg = Math.max(0, seg);
+      const a = waypoints[seg], b = waypoints[seg + 1] || a;
+      const segLen = (sim.s[seg + 1] - sim.s[seg]) || 1;
+      const t = Math.min(1, Math.max(0, (sim.dist - sim.s[seg]) / segLen));
       const pos = { lat: a.lat + (b.lat - a.lat) * t, lng: a.lng + (b.lng - a.lng) * t };
 
+      // limite do trecho + cerca virtual
+      let limit = a.speedLimit || 60, fenceName = null;
+      for (const f of fencesData) {
+        if ((f.points || []).length >= 3 && pointInPolygon(pos.lat, pos.lng, f.points)) {
+          if (f.speed_limit_kmh < limit) limit = f.speed_limit_kmh;
+          fenceName = f.name || 'Cerca'; break;
+        }
+      }
+      // aproxima a velocidade do limite suavemente (reduz antes da manobra)
+      const ev = simNextEvent();
+      const toEv = ev ? ev.d - sim.dist : Infinity;
+      let target = limit;
+      if (toEv < 40) target = Math.min(limit, 20);
+      sim.speed += (target - sim.speed) * Math.min(1, dt * 3);
+      sim.dist = Math.min(sim.total, sim.dist + ((sim.speed / 3.6) * dt * sim.factor));
+
+      // direção da seta
+      if (b !== a) sim.heading = calculateBearing(a.lat, a.lng, b.lat, b.lng);
+
       if (!sim.marker) {
-        sim.marker = L.marker([pos.lat, pos.lng], { icon: L.divIcon({ html: '<div class="sim-car"><i class="fa-solid fa-arrow-up"></i></div>', iconSize: [34, 34], iconAnchor: [17, 17] }) }).addTo(simLayer);
+        sim.marker = L.marker([pos.lat, pos.lng], {
+          icon: L.divIcon({ html: '<div class="sim-car" id="simArrow"><i class="fa-solid fa-arrow-up"></i></div>', className: '', iconSize: [34, 34], iconAnchor: [17, 17] }),
+          zIndexOffset: 5000, interactive: false
+        }).addTo(simLayer);
       } else {
         sim.marker.setLatLng([pos.lat, pos.lng]);
       }
-
+      const arrow = $('simArrow'); if (arrow) arrow.style.transform = `rotate(${sim.heading.toFixed(1)}deg)`;
       if (sim.follow) map.panTo([pos.lat, pos.lng], { animate: false });
-      $('simSpeed').innerText = Math.round(sim.speed);
-      $('simProgress').style.width = `${(sim.dist / sim.total) * 100}%`;
 
-      if (sim.dist >= sim.total) { sim.playing = false; return; }
+      // painel
+      $('simSpeed').innerText = Math.round(sim.speed);
+      $('simLimitSign').innerText = limit;
+      $('simLimitSign').style.borderColor = fenceName ? '#f43f5e' : '#dc2626';
+      const ft = $('simFenceTag');
+      if (fenceName) { ft.innerText = `${fenceName} · ${limit} km/h`; ft.classList.remove('hidden'); } else ft.classList.add('hidden');
+
+      const nxt = simNextEvent();
+      if (nxt) {
+        const d = Math.max(0, nxt.d - sim.dist);
+        $('simNextText').innerText = maneuverText(nxt.code);
+        $('simNextDist').innerText = `em ${fmtDist(d)} · ponto ${nxt.i + 1}`;
+        $('simNextIcon').innerHTML = maneuverIconHtml(nxt.code) || '<i class="fa-solid fa-arrow-up"></i>';
+        $('simNextIcon').className = 'w-9 h-9 rounded-lg bg-orange-500 text-white flex items-center justify-center shrink-0';
+        // avisos de voz
+        if (d <= 250 && d > 60 && !sim.said.has(nxt.i + 'a')) { sim.said.add(nxt.i + 'a'); speakSim(`Em ${Math.max(50, Math.round(d / 50) * 50)} metros, ${maneuverText(nxt.code).toLowerCase()}`); }
+        else if (d <= 60 && !sim.said.has(nxt.i + 'b')) { sim.said.add(nxt.i + 'b'); sim.said.add(nxt.i + 'a'); speakSim(maneuverText(nxt.code)); }
+      } else {
+        $('simNextText').innerText = 'Siga em frente';
+        $('simNextDist').innerText = `destino em ${fmtDist(Math.max(0, sim.total - sim.dist))}`;
+        $('simNextIcon').innerHTML = '<i class="fa-solid fa-flag-checkered"></i>';
+        $('simNextIcon').className = 'w-9 h-9 rounded-lg bg-emerald-500 text-white flex items-center justify-center shrink-0';
+      }
+
+      $('simProgress').style.width = `${(sim.dist / (sim.total || 1)) * 100}%`;
+      $('simDone').innerText = fmtDist(sim.dist);
+      $('simRemain').innerText = `faltam ${fmtDist(Math.max(0, sim.total - sim.dist))}`;
+
+      if (sim.dist >= sim.total) {
+        sim.playing = false; sim.speed = 0;
+        $('simSpeed').innerText = '0';
+        $('simNextText').innerText = 'Chegou ao destino';
+        if (!sim.endSaid) { sim.endSaid = true; speakSim('Você chegou ao seu destino.'); }
+        simUpdateButtons();
+        return;
+      }
       sim.raf = requestAnimationFrame(simTick);
     }
 
@@ -1453,6 +1566,7 @@
 
     function renderTrackingMarkers() {
       trackingLayer.clearLayers();
+      if (appMode !== 'tracking') return;
 
       currentActiveTrucks.forEach(u => {
         const isOnline = u.seconds_ago < 60;
