@@ -158,7 +158,10 @@
         <button id="clearSearchBtn" onclick="clearSearch()" class="hidden text-slate-400 hover:text-white p-1 text-xs">
           <i class="fa-solid fa-circle-xmark"></i>
         </button>
-        <button onclick="logout()" title="Terminar sessão" class="text-slate-400 hover:text-rose-400 p-1 text-xs ml-2">
+        <button id="syncBtn" onclick="syncRoutes()" title="Sincronizar rotas" class="text-slate-500 hover:text-brand-400 p-1 text-xs ml-2">
+          <i id="syncIcon" class="fa-solid fa-rotate"></i>
+        </button>
+        <button onclick="logout()" title="Terminar sessão" class="text-slate-400 hover:text-rose-400 p-1 text-xs ml-1">
           <i class="fa-solid fa-power-off"></i>
         </button>
       </div>
@@ -292,6 +295,22 @@
       </div>
     </div>
 
+    <!-- LEMBRETE DE FARÓIS (após as 18h) -->
+    <div id="headlightModal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-md z-[60] flex items-center justify-center p-4">
+      <div class="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-sm shadow-2xl p-6 text-center flex flex-col items-center gap-4">
+        <div class="w-16 h-16 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center justify-center text-3xl">
+          <i class="fa-solid fa-lightbulb"></i>
+        </div>
+        <div>
+          <h3 class="text-lg font-black text-white">Ligue os faróis</h3>
+          <p class="text-xs text-slate-400 mt-1">Já passou das 18h. Lembre-se de acender os faróis antes de seguir viagem.</p>
+        </div>
+        <button onclick="closeHeadlightModal()" class="w-full py-3 rounded-2xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-sm shadow-lg transition">
+          Entendi
+        </button>
+      </div>
+    </div>
+
     <!-- MODAL DE CHEGADA AO DESTINO -->
     <div id="arrivalModal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
       <div class="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-sm shadow-2xl p-6 text-center flex flex-col items-center gap-4">
@@ -302,6 +321,17 @@
           <h3 class="text-lg font-black text-white">Você Chegou ao Destino!</h3>
           <p class="text-xs text-slate-400 mt-1">O trajeto planejado foi concluído com sucesso.</p>
         </div>
+        <div class="w-full grid grid-cols-2 gap-2">
+          <div class="rounded-2xl bg-slate-800/70 border border-slate-700/60 py-2.5 px-2">
+            <p class="text-[10px] uppercase tracking-wider font-bold text-slate-400">Previsto</p>
+            <p id="arrivalEstimated" class="text-lg font-black text-white mt-0.5">--</p>
+          </div>
+          <div class="rounded-2xl bg-slate-800/70 border border-slate-700/60 py-2.5 px-2">
+            <p class="text-[10px] uppercase tracking-wider font-bold text-slate-400">Realizado</p>
+            <p id="arrivalActual" class="text-lg font-black text-white mt-0.5">--</p>
+          </div>
+        </div>
+        <p id="arrivalDiff" class="text-xs font-semibold -mt-2"></p>
         <div class="w-full pt-2">
           <button onclick="finishRoute()" class="w-full py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm shadow-lg shadow-emerald-600/30 transition">
             Finalizar Percurso
@@ -621,81 +651,203 @@
       map.setZoom(target, { animate: true });
     }
 
-    function getAudioContext() {
-      if (!audioContext) {
-        audioContext = new (window.AudioContext || window.webkitAudioContext)();
-      }
-      if (audioContext.state === 'suspended') {
-        audioContext.resume();
-      }
-      return audioContext;
-    }
+    // ========================================================
+    // 🔊 VOZ (sem bips). Fila própria, destrava no primeiro toque e se recupera
+    // quando o navegador "engole" a fala (comum no Android com GPS real).
+    // ========================================================
+    const Voice = {
+      ok: ('speechSynthesis' in window) && typeof SpeechSynthesisUtterance !== 'undefined',
+      voice: null, unlocked: false, q: [], cur: null, timer: null, holdUntil: 0
+    };
 
-    function playTone(type) {
+    function pickVoice() {
+      if (!Voice.ok) return;
       try {
-        const ctx = getAudioContext();
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        const now = ctx.currentTime;
-
-        if (type === 'start') {
-          osc.type = 'triangle';
-          osc.frequency.setValueAtTime(440, now);
-          osc.frequency.exponentialRampToValueAtTime(880, now + 0.25);
-          gain.gain.setValueAtTime(0.2, now);
-          gain.gain.exponentialRampToValueAtTime(0.01, now + 0.35);
-          osc.start(now);
-          osc.stop(now + 0.35);
-        } else if (type === 'waypoint' || type === 'alert50m') {
-          osc.type = 'sine';
-          osc.frequency.setValueAtTime(700, now);
-          osc.frequency.setValueAtTime(950, now + 0.1);
-          gain.gain.setValueAtTime(0.3, now);
-          gain.gain.exponentialRampToValueAtTime(0.01, now + 0.25);
-          osc.start(now);
-          osc.stop(now + 0.25);
-        } else if (type === 'speed') {
-          osc.type = 'square';
-          osc.frequency.setValueAtTime(900, now);
-          gain.gain.setValueAtTime(0.1, now);
-          gain.gain.setValueAtTime(0.0001, now + 0.12);
-          gain.gain.setValueAtTime(0.1, now + 0.2);
-          gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.34);
-          osc.start(now);
-          osc.stop(now + 0.36);
-        } else if (type === 'overspeed') {
-          osc.type = 'sawtooth';
-          osc.frequency.setValueAtTime(520, now);
-          osc.frequency.exponentialRampToValueAtTime(380, now + 0.4);
-          gain.gain.setValueAtTime(0.12, now);
-          gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.45);
-          osc.start(now);
-          osc.stop(now + 0.47);
-        } else if (type === 'finish') {
-          osc.type = 'sine';
-          osc.frequency.setValueAtTime(523.25, now);
-          osc.frequency.setValueAtTime(783.99, now + 0.2);
-          gain.gain.setValueAtTime(0.2, now);
-          gain.gain.exponentialRampToValueAtTime(0.01, now + 0.6);
-          osc.start(now);
-          osc.stop(now + 0.6);
-        }
+        const vs = window.speechSynthesis.getVoices() || [];
+        Voice.voice = vs.find(v => v.lang === 'pt-BR') || vs.find(v => /^pt/i.test(v.lang)) || null;
       } catch (e) {}
     }
+    if (Voice.ok) {
+      pickVoice();
+      try { window.speechSynthesis.addEventListener('voiceschanged', pickVoice); } catch (e) {}
+    }
 
+    // O navegador só libera a voz depois de um toque do usuário: "acorda" a voz em silêncio
+    function unlockVoice() {
+      if (!Voice.ok || Voice.unlocked) return;
+      try {
+        const u = new SpeechSynthesisUtterance(' ');
+        u.volume = 0;
+        u.lang = 'pt-BR';
+        if (Voice.voice) u.voice = Voice.voice;
+        window.speechSynthesis.speak(u);
+        Voice.unlocked = true;
+      } catch (e) {}
+    }
+    ['pointerdown', 'touchstart', 'click', 'keydown'].forEach(ev => document.addEventListener(ev, unlockVoice, { passive: true }));
+
+    function voiceNext() {
+      if (!Voice.ok || Voice.cur || !Voice.q.length) return;
+      const wait = Voice.holdUntil - Date.now();
+      if (wait > 0) { setTimeout(voiceNext, wait + 5); return; }
+
+      const text = Voice.q.shift();
+      const id = {};
+      Voice.cur = id;
+      const done = () => {
+        if (Voice.cur !== id) return;
+        clearTimeout(Voice.timer);
+        Voice.cur = null;
+        voiceNext();
+      };
+      try {
+        const synth = window.speechSynthesis;
+        if (synth.paused) synth.resume();
+        const u = new SpeechSynthesisUtterance(text);
+        u.lang = 'pt-BR';
+        u.rate = 1.05;
+        u.pitch = 1.0;
+        u.volume = 1;
+        if (Voice.voice) u.voice = Voice.voice;
+        u.onend = done;
+        u.onerror = done;
+        // se o navegador travar e nunca avisar que terminou, destrava a fila
+        Voice.timer = setTimeout(() => {
+          if (Voice.cur !== id) return;
+          try { synth.cancel(); } catch (e) {}
+          done();
+        }, 4000 + text.length * 120);
+        synth.speak(u);
+      } catch (e) {
+        Voice.cur = null;
+      }
+    }
+
+    // queue=false: interrompe o que estiver falando e fala já. queue=true: entra na fila.
     function speakInstruction(text, queue = false) {
-      if (!('speechSynthesis' in window)) return;
-      try {
-        if (!queue) window.speechSynthesis.cancel();
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.lang = 'pt-BR';
-        utterance.rate = 1.05;
-        utterance.pitch = 1.0;
-        window.speechSynthesis.speak(utterance);
-      } catch (e) {}
+      if (!Voice.ok) return;
+      if (!queue) {
+        Voice.q = [];
+        if (Voice.cur) {
+          Voice.cur = null;
+          clearTimeout(Voice.timer);
+          try { window.speechSynthesis.cancel(); } catch (e) {}
+          Voice.holdUntil = Date.now() + 80; // folga depois do cancel (evita fala descartada)
+        }
+      }
+      Voice.q.push(text);
+      voiceNext();
     }
+
+    function stopSpeaking() {
+      Voice.q = [];
+      Voice.cur = null;
+      clearTimeout(Voice.timer);
+      try { if (Voice.ok) window.speechSynthesis.cancel(); } catch (e) {}
+    }
+
+    // Mantém a tela acesa durante a navegação (tela apagada = GPS e voz param)
+    let wakeLock = null;
+    async function requestWakeLock() {
+      try {
+        if (!('wakeLock' in navigator) || wakeLock) return;
+        wakeLock = await navigator.wakeLock.request('screen');
+        wakeLock.addEventListener('release', () => { wakeLock = null; });
+      } catch (e) { wakeLock = null; }
+    }
+    function releaseWakeLock() {
+      try { if (wakeLock) wakeLock.release(); } catch (e) {}
+      wakeLock = null;
+    }
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && isNavigating) requestWakeLock();
+    });
+
+    // ========================================================
+    // 🏁 TEMPO PREVISTO x REALIZADO + CHEGADA (fala uma única vez)
+    // ========================================================
+    const DEFAULT_LIMIT_KMH = 40;   // trecho sem limite cadastrado
+    let wpAlong = [0];              // distância acumulada em cada ponto da rota
+    let trip = null;
+
+    function newTrip() {
+      return { started: false, startMs: 0, startCovered: 0, simSec: 0, arrived: false };
+    }
+    trip = newTrip();
+
+    // Tempo para percorrer a rota (a partir de fromDist) respeitando o limite de cada trecho
+    function estimateTripSec(fromDist = 0) {
+      let sec = 0;
+      for (let i = 0; i < waypoints.length - 1; i++) {
+        const a = Math.max(wpAlong[i], fromDist);
+        const b = wpAlong[i + 1];
+        if (b <= a) continue;
+        const kmh = waypoints[i].speedLimit > 0 ? waypoints[i].speedLimit : DEFAULT_LIMIT_KMH;
+        sec += (b - a) / (kmh / 3.6);
+      }
+      return sec;
+    }
+
+    function fmtDuration(sec) {
+      sec = Math.max(0, Math.round(sec));
+      const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), r = sec % 60;
+      if (h) return `${h} h ${String(m).padStart(2, '0')} min`;
+      if (m >= 10) return `${m} min`;
+      if (m) return `${m} min ${String(r).padStart(2, '0')} s`;
+      return `${r} s`;
+    }
+
+    function handleArrival() {
+      if (trip.arrived) return;   // só uma vez por percurso
+      trip.arrived = true;
+
+      const est = estimateTripSec(trip.startCovered);
+      let actual = null;
+      if (navMethod === 'sim') actual = trip.simSec > 0 ? trip.simSec : null;
+      else if (trip.started) actual = (Date.now() - trip.startMs) / 1000;
+
+      document.getElementById('arrivalEstimated').innerText = fmtDuration(est);
+      document.getElementById('arrivalActual').innerText = actual === null ? '--' : fmtDuration(actual);
+
+      const diffEl = document.getElementById('arrivalDiff');
+      if (actual === null) {
+        diffEl.innerText = '';
+      } else {
+        const diff = actual - est;
+        if (Math.abs(diff) <= Math.max(30, est * 0.03)) {
+          diffEl.innerText = 'Dentro do tempo previsto';
+          diffEl.className = 'text-xs font-semibold -mt-2 text-emerald-400';
+        } else if (diff < 0) {
+          diffEl.innerText = `${fmtDuration(-diff)} mais rápido que o previsto`;
+          diffEl.className = 'text-xs font-semibold -mt-2 text-emerald-400';
+        } else {
+          diffEl.innerText = `${fmtDuration(diff)} acima do previsto`;
+          diffEl.className = 'text-xs font-semibold -mt-2 text-amber-400';
+        }
+      }
+
+      document.getElementById('finishNavBtn').classList.remove('hidden');
+      document.getElementById('arrivalModal').classList.remove('hidden');
+      speakInstruction('Você chegou ao seu destino.');
+    }
+
+    // ========================================================
+    // 💡 LEMBRETE DE FARÓIS (a partir das 18h, uma vez por percurso)
+    // ========================================================
+    const HEADLIGHT_FROM_HOUR = 18;
+    let headlightShownForTrip = false;
+
+    function checkHeadlights() {
+      if (!isNavigating || headlightShownForTrip) return;
+      if (new Date().getHours() < HEADLIGHT_FROM_HOUR) return;
+      headlightShownForTrip = true;
+      document.getElementById('headlightModal').classList.remove('hidden');
+      speakInstruction('Lembre-se de ligar os faróis.', true);
+    }
+    function closeHeadlightModal() {
+      document.getElementById('headlightModal').classList.add('hidden');
+    }
+    setInterval(checkHeadlights, 60000);
 
     window.addEventListener('load', () => {
       initMap();
@@ -767,19 +919,58 @@
       cam.tHeading = normAngle(bearing);
     }
 
-    async function fetchDatabaseRoutes() {
+    let activeRouteId = null;
+    let activeRouteFp = '';
+    const routeFp = item => JSON.stringify(item.waypoints || []) + '|' + (item.name || '');
+
+    // Busca as rotas no servidor. Devolve true se conseguiu; senão mantém as que já tem (ou o cache do aparelho)
+    async function fetchDatabaseRoutes(manual = false) {
+      const ctrl = ('AbortController' in window) ? new AbortController() : null;
+      const timer = setTimeout(() => { if (ctrl) ctrl.abort(); }, 45000); // servidor gratuito pode demorar a acordar
       try {
         if (!sessionUser) throw new Error('sem sessão');
-        const res = await fetch(`${API_BASE_URL}/routes?company_id=${sessionUser.company_id}`);
+        const res = await fetch(`${API_BASE_URL}/routes?company_id=${sessionUser.company_id}`, {
+          cache: 'no-store',
+          signal: ctrl ? ctrl.signal : undefined
+        });
         if (!res.ok) throw new Error('http ' + res.status);
-        dbRoutes = await res.json();
+        const data = await res.json();
+        if (!Array.isArray(data)) throw new Error('resposta inválida');
+        dbRoutes = data;
         try { localStorage.setItem('geonav_routes', JSON.stringify(dbRoutes)); } catch (e) {} // cópia p/ usar sem internet
         updateRouteBadge(dbRoutes.length);
+        return true;
       } catch (err) {
-        try { dbRoutes = JSON.parse(localStorage.getItem('geonav_routes') || '[]'); } catch (e) { dbRoutes = []; }
+        if (!dbRoutes.length) {
+          try { dbRoutes = JSON.parse(localStorage.getItem('geonav_routes') || '[]'); } catch (e) { dbRoutes = []; }
+        }
         updateRouteBadge(dbRoutes.length);
-        if (dbRoutes.length) notify('Sem conexão: usando rotas salvas no aparelho', 'warning');
+        if (!manual && dbRoutes.length) notify('Sem conexão: usando rotas salvas no aparelho', 'warning');
+        return false;
+      } finally {
+        clearTimeout(timer);
       }
+    }
+
+    let syncing = false;
+    async function syncRoutes() {
+      if (syncing) return;
+      syncing = true;
+      const icon = document.getElementById('syncIcon');
+      icon.classList.add('fa-spin');
+      const ok = await fetchDatabaseRoutes(true);
+      icon.classList.remove('fa-spin');
+      syncing = false;
+
+      if (!ok) { notify('Sem conexão. Mantive as rotas salvas no aparelho.', 'warning'); return; }
+
+      // a rota que está em uso foi editada no sistema?
+      if (isNavigating && activeRouteId) {
+        const upd = dbRoutes.find(r => String(r.id) === activeRouteId);
+        if (!upd) { notify('Rotas atualizadas. A rota em uso não existe mais no sistema.', 'warning'); return; }
+        if (routeFp(upd) !== activeRouteFp) { notify('Rotas atualizadas. A rota em uso foi alterada: cancele e selecione de novo.', 'warning'); return; }
+      }
+      notify(`Rotas sincronizadas (${dbRoutes.length})`, 'success');
     }
 
     function updateRouteBadge(total) {
@@ -953,6 +1144,10 @@
       isNavigating = true;
       lastSignaledWaypoint = -1;
       announced50mWp = -1;
+      trip = newTrip();
+      headlightShownForTrip = false;
+      activeRouteId = String(item.id);
+      activeRouteFp = routeFp(item);
 
       if (waypoints.length >= 2) {
         currentBearing = calculateBearing(waypoints[0].lat, waypoints[0].lng, waypoints[1].lat, waypoints[1].lng);
@@ -975,8 +1170,11 @@
       AZ.manualUntil = 0; AZ.speed = 0; AZ.last = 0;
       prefetchRouteTiles();
 
-      playTone('start');
+      unlockVoice();
+      if (!Voice.ok) notify('Este navegador não tem voz. Abra a página no Chrome ou Safari.', 'warning');
       speakInstruction('Iniciando rota. Siga em frente pelo trajeto.');
+      requestWakeLock();
+      checkHeadlights();
       notify(`Rota selecionada! GPS em andamento.`, 'success');
     }
 
@@ -1009,8 +1207,10 @@
       });
 
       let totalM = 0;
+      wpAlong = [0];
       for (let i = 0; i < waypoints.length - 1; i++) {
         totalM += distanceInMeters(waypoints[i].lat, waypoints[i].lng, waypoints[i+1].lat, waypoints[i+1].lng);
+        wpAlong.push(totalM);
       }
       totalRouteDistanceMeters = totalM;
 
@@ -1024,6 +1224,7 @@
 
     function switchNavMethod(method) {
       navMethod = method;
+      trip = newTrip();
       const btnReal = document.getElementById('btnModeReal');
       const btnSim = document.getElementById('btnModeSim');
       const simControls = document.getElementById('simControlsRow');
@@ -1067,11 +1268,12 @@
         simProgress = 0;
         lastSignaledWaypoint = -1;
         announced50mWp = -1;
+        trip = newTrip();
+        document.getElementById('arrivalModal').classList.add('hidden');
       }
       simPlaying = true;
       simLastTimestamp = performance.now();
       document.getElementById('btnPlayPauseSim').innerHTML = '<i class="fa-solid fa-pause"></i>';
-      playTone('start');
       simAnimFrame = requestAnimationFrame(simStep);
     }
 
@@ -1086,6 +1288,7 @@
     function resetSim() {
       pauseSim();
       simProgress = 0;
+      trip = newTrip();
       lastSignaledWaypoint = -1;
       announced50mWp = -1;
       document.getElementById('simSlider').value = 0;
@@ -1102,6 +1305,9 @@
 
     function seekSim(val) {
       simProgress = val / 1000;
+      // mexeu na barra: o tempo passa a contar a partir deste ponto
+      trip = newTrip();
+      trip.startCovered = simProgress * totalRouteDistanceMeters;
       renderSimFrame(0);
     }
 
@@ -1127,10 +1333,7 @@
         simAnimFrame = requestAnimationFrame(simStep);
       } else {
         pauseSim();
-        playTone('finish');
-        speakInstruction('Você chegou ao seu destino final.');
-        document.getElementById('finishNavBtn').classList.remove('hidden');
-        document.getElementById('arrivalModal').classList.remove('hidden');
+        handleArrival();
       }
     }
 
@@ -1141,6 +1344,8 @@
       const speedMetersPerSec = (speedKmh * 1000) / 3600;
 
       if (deltaSec > 0) {
+        trip.started = true;
+        trip.simSec += deltaSec * simSpeedMultiplier; // tempo equivalente a 1x
         const distDelta = speedMetersPerSec * deltaSec;
         const progressDelta = distDelta / (totalRouteDistanceMeters || 1);
         simProgress = Math.min(1, simProgress + progressDelta);
@@ -1188,6 +1393,12 @@
       lastSignalKey = '';
       lastAnnouncedLimit = null;
       currentSpeedKmh = 0;
+      trip = newTrip();
+      activeRouteId = null;
+      activeRouteFp = '';
+      headlightShownForTrip = false;
+      closeHeadlightModal();
+      releaseWakeLock();
 
       prefetchToken++; // interrompe download de mapa em andamento
       routeCasing.setLatLngs([]);
@@ -1210,7 +1421,7 @@
       document.getElementById('searchResultsCard').classList.add('hidden');
       document.getElementById('routeSubStatus').innerText = 'Selecione uma rota acima para navegar';
 
-      if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+      stopSpeaking();
 
       if (userLat && userLng) {
         map.setView([userLat, userLng], 16, { animate: false });
@@ -1530,6 +1741,13 @@
     function processNavigationHUD(lat, lng, closestIndex, coveredDist) {
       const remainingDist = Math.max(0, totalRouteDistanceMeters - coveredDist);
 
+      // GPS real: o relógio do percurso começa quando o veículo já andou um pouco sobre a rota
+      if (navMethod === 'real' && !trip.started && !trip.arrived && coveredDist > 30) {
+        trip.started = true;
+        trip.startMs = Date.now();
+        trip.startCovered = coveredDist;
+      }
+
       if (remainingDist >= 1000) {
         document.getElementById('navRemainingDistance').innerText = `${(remainingDist / 1000).toFixed(2)} km restante`;
       } else {
@@ -1547,15 +1765,7 @@
         turnInstruction.innerText = 'Destino Atingido!';
         distToNextEl.innerText = '0 m';
         turnIcon.className = 'fa-solid fa-flag-checkered text-emerald-400';
-
-        document.getElementById('finishNavBtn').classList.remove('hidden');
-        document.getElementById('arrivalModal').classList.remove('hidden');
-
-        if (lastSignaledWaypoint !== 999999) {
-          lastSignaledWaypoint = 999999;
-          playTone('finish');
-          speakInstruction('Você chegou ao seu destino.');
-        }
+        handleArrival();
       } else {
         const mi = signals.findIndex(m => m.along > coveredDist - 3);
         if (mi === -1) {
@@ -1569,10 +1779,6 @@
           turnInstruction.innerText = info.t;
           distToNextEl.innerText = fmt(dd);
           turnIcon.className = info.i;
-          if (dd < 30 && lastSignaledWaypoint !== mi) {
-            lastSignaledWaypoint = mi;
-            playTone('waypoint');
-          }
         }
       }
 
@@ -1725,19 +1931,23 @@
       });
     }
 
-    const SIGNAL_STAGES = [300]; // um único aviso, a 300 m da manobra
+    const SIGNAL_FAR = 300;   // "Em trezentos metros, vire à direita"
+    const SIGNAL_NEAR = 30;   // só a ordem: "Vire à direita"
 
     function announceSignal(sig, ahead) {
       // normalmente "300 metros"; se a rota começou mais perto, fala a distância real arredondada
       const dist = ahead >= 270 ? 300 : Math.max(50, Math.round(ahead / 50) * 50);
       const distTxt = dist === 300 ? 'trezentos' : String(dist);
-      playTone('alert50m');
       speakInstruction(`Em ${distTxt} metros, ${maneuverSpeechBody(sig)}.`, true);
+    }
+
+    function announceSignalNow(sig) {
+      const body = maneuverSpeechBody(sig);
+      speakInstruction(body.charAt(0).toUpperCase() + body.slice(1) + '.', false);
     }
 
     // Velocidade: só fala quando o limite da via MUDA
     function announceSpeedLimit(limit) {
-      playTone('speed');
       speakInstruction(`Limite de velocidade, ${limit} quilômetros por hora.`, true);
     }
 
@@ -1770,7 +1980,6 @@
       const backUnder = !limit || currentSpeedKmh <= limit;
       if (isOver && !overspeedActive) {
         overspeedActive = true;
-        playTone('overspeed');
         speakInstruction('Acima do limite de velocidade.', true);
       } else if (backUnder) {
         overspeedActive = false;
@@ -1784,20 +1993,23 @@
       spd.classList.toggle('text-rose-300', over);
       spd.classList.toggle('text-brand-300', !over);
 
-      // 2) manobras: um aviso a 300 m
+      // 2) manobras: aviso a 300 m ("Em 300 metros, ...") e a 30 m só a ordem ("Vire à direita")
       for (const sig of signals) {
         const ahead = sig.along - coveredDist;
 
         // voltou na simulação: rearma os avisos
-        if (ahead > SIGNAL_STAGES[0] + 100) sig.done = {};
+        if (ahead > SIGNAL_FAR + 100) sig.done = {};
+        if (ahead <= 0) continue;
 
-        if (ahead > 0 && ahead <= SIGNAL_STAGES[0]) {
-          let stage = null;
-          for (const t of SIGNAL_STAGES) if (ahead <= t) stage = t; // menor marco já cruzado
-          if (stage && !sig.done[stage]) {
-            SIGNAL_STAGES.forEach(t => { if (t >= stage) sig.done[t] = true; });
-            announceSignal(sig, ahead);
+        if (ahead <= SIGNAL_NEAR) {
+          if (!sig.done.near) {
+            sig.done.near = true;
+            sig.done.far = true; // se chegou direto aos 30 m, não fala mais o aviso de longe
+            announceSignalNow(sig);
           }
+        } else if (ahead <= SIGNAL_FAR && !sig.done.far) {
+          sig.done.far = true;
+          announceSignal(sig, ahead);
         }
       }
     }
