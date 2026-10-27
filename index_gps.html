@@ -144,8 +144,9 @@
     </div>
 
     <!-- 🔍 CAMPO DE PESQUISA COM DEBOUNCE FILTRANDO O BANCO -->
-    <div id="searchBarWrapper" class="safe-top-search absolute left-3 right-3 sm:left-6 sm:w-96 z-30 transition-all">
-      <div class="relative bg-slate-900/95 backdrop-blur-md rounded-2xl border border-slate-700/80 shadow-2xl flex items-center px-3.5 py-1.5 transition-all focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-brand-500/20">
+    <div id="searchBarWrapper" class="safe-top-search absolute left-3 right-3 sm:left-6 sm:w-[28rem] z-30 transition-all">
+      <div class="flex items-stretch gap-2">
+      <div class="relative flex-1 min-w-0 bg-slate-900/95 backdrop-blur-md rounded-2xl border border-slate-700/80 shadow-2xl flex items-center px-3.5 py-1.5 transition-all focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-brand-500/20">
         <i class="fa-solid fa-route text-brand-400 text-sm mr-2.5"></i>
         <input 
           id="searchInput" 
@@ -158,12 +159,15 @@
         <button id="clearSearchBtn" onclick="clearSearch()" class="hidden text-slate-400 hover:text-white p-1 text-xs">
           <i class="fa-solid fa-circle-xmark"></i>
         </button>
-        <button id="syncBtn" onclick="syncRoutes()" title="Sincronizar rotas" class="text-slate-500 hover:text-brand-400 p-1 text-xs ml-2">
-          <i id="syncIcon" class="fa-solid fa-rotate"></i>
-        </button>
-        <button onclick="logout()" title="Terminar sessão" class="text-slate-400 hover:text-rose-400 p-1 text-xs ml-1">
+        <button onclick="logout()" title="Terminar sessão" class="text-slate-400 hover:text-rose-400 p-1 text-xs ml-2">
           <i class="fa-solid fa-power-off"></i>
         </button>
+      </div>
+
+      <!-- Sincronizar rotas e cercas (botão separado, mesmo estilo da busca) -->
+      <button id="syncBtn" onclick="syncRoutes()" title="Sincronizar rotas e cercas" class="w-12 shrink-0 bg-slate-900/95 backdrop-blur-md rounded-2xl border border-slate-700/80 shadow-2xl flex items-center justify-center text-brand-400 hover:text-white hover:border-brand-500 active:scale-95 transition">
+        <i id="syncIcon" class="fa-solid fa-rotate text-sm"></i>
+      </button>
       </div>
 
       <!-- Lista Dropdown de Rotas do Banco -->
@@ -229,7 +233,7 @@
 
         <div class="flex items-center justify-between text-[11px] text-slate-400 font-medium">
           <span><i class="fa-solid fa-flag-checkered text-brand-400 mr-1"></i><span id="navRemainingDistance">0.0 km restante</span></span>
-          <span><i class="fa-regular fa-clock text-emerald-400 mr-1"></i><span id="navRemainingTime">-- min</span></span>
+          <span><i class="fa-regular fa-clock text-emerald-400 mr-1"></i><span id="navRemainingTime">-- min</span><span class="text-slate-600 mx-1.5">•</span><span class="text-slate-300">Chegada <b id="navEta" class="text-white">--:--</b></span></span>
         </div>
       </div>
 
@@ -303,10 +307,10 @@
         </div>
         <div>
           <h3 class="text-lg font-black text-white">Ligue os faróis</h3>
-          <p class="text-xs text-slate-400 mt-1">Já passou das 18h. Lembre-se de acender os faróis antes de seguir viagem.</p>
+          <p class="text-xs text-slate-400 mt-1">Horário noturno (18h às 6h). Lembre-se de acender os faróis antes de seguir viagem.</p>
         </div>
-        <button onclick="closeHeadlightModal()" class="w-full py-3 rounded-2xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-sm shadow-lg transition">
-          Entendi
+        <button id="headlightBtn" onclick="closeHeadlightModal()" class="w-full py-3 rounded-2xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-sm shadow-lg transition">
+          Entendi (3)
         </button>
       </div>
     </div>
@@ -371,7 +375,7 @@
     let vehicleMarker = null;
 
     let currentTileLayer = null;
-    let activeLayerKey = 'streets';
+    let activeLayerKey = 'satellite';
 
     let userLat = null;
     let userLng = null;
@@ -747,6 +751,9 @@
     }
 
     // Mantém a tela acesa durante a navegação (tela apagada = GPS e voz param)
+    // O seletor GPS Real / Simulação não aparece no uso normal. Para testar, abra a página com ?sim no endereço.
+    const SIM_UI = new URLSearchParams(location.search).has('sim');
+
     let wakeLock = null;
     async function requestWakeLock() {
       try {
@@ -775,14 +782,17 @@
     }
     trip = newTrip();
 
-    // Tempo para percorrer a rota (a partir de fromDist) respeitando o limite de cada trecho
+    // Tempo para percorrer a rota (a partir de fromDist) respeitando o limite de cada trecho e das cercas
     function estimateTripSec(fromDist = 0) {
       let sec = 0;
-      for (let i = 0; i < waypoints.length - 1; i++) {
-        const a = Math.max(wpAlong[i], fromDist);
-        const b = wpAlong[i + 1];
+      for (let i = 0; i < interpolatedPoints.length - 1; i++) {
+        const a = Math.max(cumulativeDistances[i], fromDist);
+        const b = cumulativeDistances[i + 1];
         if (b <= a) continue;
-        const kmh = waypoints[i].speedLimit > 0 ? waypoints[i].speedLimit : DEFAULT_LIMIT_KMH;
+        const wp = waypoints[Math.min(interpolatedPoints[i + 1].segmentIndex || 0, waypoints.length - 1)];
+        let kmh = wp && wp.speedLimit > 0 ? wp.speedLimit : DEFAULT_LIMIT_KMH;
+        const fz = fenceAt((a + b) / 2);
+        if (fz && fz.limit < kmh) kmh = fz.limit;
         sec += (b - a) / (kmh / 3.6);
       }
       return sec;
@@ -832,26 +842,180 @@
     }
 
     // ========================================================
-    // 💡 LEMBRETE DE FARÓIS (a partir das 18h, uma vez por percurso)
+    // 💡 LEMBRETE DE FARÓIS (18h às 6h, uma vez por percurso, some sozinho em 3 s)
     // ========================================================
     const HEADLIGHT_FROM_HOUR = 18;
+    const HEADLIGHT_UNTIL_HOUR = 6;
     let headlightShownForTrip = false;
+    let headlightTimer = null;
+
+    function isHeadlightTime() {
+      const h = new Date().getHours();
+      return h >= HEADLIGHT_FROM_HOUR || h < HEADLIGHT_UNTIL_HOUR;
+    }
 
     function checkHeadlights() {
-      if (!isNavigating || headlightShownForTrip) return;
-      if (new Date().getHours() < HEADLIGHT_FROM_HOUR) return;
+      if (!isNavigating || headlightShownForTrip || !isHeadlightTime()) return;
       headlightShownForTrip = true;
+
+      let n = 3;
+      const btn = document.getElementById('headlightBtn');
+      btn.innerText = `Entendi (${n})`;
       document.getElementById('headlightModal').classList.remove('hidden');
       speakInstruction('Lembre-se de ligar os faróis.', true);
+
+      clearInterval(headlightTimer);
+      headlightTimer = setInterval(() => {
+        n--;
+        if (n <= 0) closeHeadlightModal();
+        else btn.innerText = `Entendi (${n})`;
+      }, 1000);
     }
+
     function closeHeadlightModal() {
+      clearInterval(headlightTimer);
+      headlightTimer = null;
       document.getElementById('headlightModal').classList.add('hidden');
     }
     setInterval(checkHeadlights, 60000);
 
+    // ========================================================
+    // 🚧 CERCAS VIRTUAIS: desenho no mapa, aviso 35 m antes e limite dentro da cerca
+    // ========================================================
+    const FENCE_WARN_M = 35;
+    let fencesData = [];
+    let fencesLayer = null;
+    let routeFences = [];       // trechos da rota que passam dentro de cada cerca
+    let lastFenceKey = '';
+    let activeRouteName = '';
+
+    function pointInPolygon(lat, lng, pts) {
+      let inside = false;
+      for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+        const xi = pts[i].lng, yi = pts[i].lat, xj = pts[j].lng, yj = pts[j].lat;
+        if (((yi > lat) !== (yj > lat)) && (lng < (xj - xi) * (lat - yi) / (yj - yi) + xi)) inside = !inside;
+      }
+      return inside;
+    }
+
+    function fencePoints(f) {
+      return toArray(f.points)
+        .map(p => ({ lat: parseFloat(p.lat ?? p.latitude), lng: parseFloat(p.lng ?? p.lon ?? p.longitude) }))
+        .filter(p => isFinite(p.lat) && isFinite(p.lng));
+    }
+
+    function renderFences() {
+      if (!fencesLayer) return;
+      fencesLayer.clearLayers();
+      fencesData.forEach(f => {
+        const pts = fencePoints(f);
+        if (pts.length < 3) return;
+        const poly = L.polygon(pts.map(p => [p.lat, p.lng]), {
+          color: '#f43f5e', weight: 2, dashArray: '6 6', fillColor: '#f43f5e', fillOpacity: 0.2, interactive: false
+        }).addTo(fencesLayer);
+        poly.bringToBack(); // fica por baixo da linha da rota
+
+        const lim = parseInt(f.speed_limit_kmh, 10);
+        if (lim > 0) {
+          const c = pts.reduce((a, p) => ({ lat: a.lat + p.lat / pts.length, lng: a.lng + p.lng / pts.length }), { lat: 0, lng: 0 });
+          const html = `<div class="counter-rot"><div class="sig-pin sig-speed" style="border-color:#f43f5e">${lim}</div></div>`;
+          L.marker([c.lat, c.lng], {
+            icon: L.divIcon({ html, className: '', iconSize: [32, 32], iconAnchor: [16, 16] }),
+            interactive: false, zIndexOffset: 300
+          }).addTo(fencesLayer);
+        }
+      });
+    }
+
+    // Onde a rota entra e sai de cada cerca (distância ao longo do trajeto)
+    function computeRouteFences() {
+      routeFences = [];
+      lastFenceKey = '';
+      const n = interpolatedPoints.length;
+      if (n < 2 || !fencesData.length) return;
+
+      fencesData.forEach(f => {
+        const pts = fencePoints(f);
+        if (pts.length < 3) return;
+        const limit = parseInt(f.speed_limit_kmh, 10) || 30;
+        const lats = pts.map(p => p.lat), lngs = pts.map(p => p.lng);
+        const minLat = Math.min(...lats), maxLat = Math.max(...lats), minLng = Math.min(...lngs), maxLng = Math.max(...lngs);
+
+        let cur = null;
+        for (let i = 0; i < n; i++) {
+          const p = interpolatedPoints[i];
+          const inside = p.lat >= minLat && p.lat <= maxLat && p.lng >= minLng && p.lng <= maxLng && pointInPolygon(p.lat, p.lng, pts);
+          if (inside && !cur) {
+            cur = { name: f.name || 'Cerca', limit, enter: cumulativeDistances[i], exit: cumulativeDistances[i], startsInside: i === 0, warned: false };
+          } else if (inside && cur) {
+            cur.exit = cumulativeDistances[i];
+          } else if (!inside && cur) {
+            routeFences.push(cur);
+            cur = null;
+          }
+        }
+        if (cur) routeFences.push(cur);
+      });
+      routeFences.sort((a, b) => a.enter - b.enter);
+    }
+
+    // cerca em que o veículo está (a de menor limite, se houver sobreposição)
+    function fenceAt(along) {
+      let best = null;
+      for (const r of routeFences) {
+        if (along >= r.enter && along <= r.exit && (!best || r.limit < best.limit)) best = r;
+      }
+      return best;
+    }
+
+    async function fetchFences() {
+      const ctrl = ('AbortController' in window) ? new AbortController() : null;
+      const timer = setTimeout(() => { if (ctrl) ctrl.abort(); }, 45000);
+      let ok = false;
+      try {
+        if (!sessionUser) throw new Error('sem sessão');
+        const res = await fetch(`${API_BASE_URL}/fences?company_id=${sessionUser.company_id}&_=${Date.now()}`, { signal: ctrl ? ctrl.signal : undefined });
+        if (!res.ok) throw new Error('http ' + res.status);
+        const data = await res.json();
+        if (!Array.isArray(data)) throw new Error('resposta inválida');
+        fencesData = data;
+        try { localStorage.setItem('geonav_fences', JSON.stringify(fencesData)); } catch (e) {}
+        ok = true;
+      } catch (err) {
+        if (!fencesData.length) {
+          try { fencesData = JSON.parse(localStorage.getItem('geonav_fences') || '[]'); } catch (e) { fencesData = []; }
+        }
+      } finally {
+        clearTimeout(timer);
+      }
+      renderFences();
+      if (isNavigating) computeRouteFences();
+      return ok;
+    }
+
+    // ========================================================
+    // 🕒 PREVISÃO DE CHEGADA (pela velocidade que o veículo está fazendo)
+    // ========================================================
+    let speedEma = 0;      // média suavizada da velocidade em movimento
+    let speedSamples = 0;
+
+    function etaSpeedKmh() {
+      return (speedSamples >= 8 && speedEma > 5) ? speedEma : (activeSpeedLimit || DEFAULT_LIMIT_KMH);
+    }
+
+    function fmtClock(d) {
+      return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+    }
+
+    function fmtRemaining(sec) {
+      const m = Math.max(0, Math.round(sec / 60));
+      return m >= 60 ? `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')} min` : `${m} min`;
+    }
+
     window.addEventListener('load', () => {
       initMap();
       fetchDatabaseRoutes();
+      fetchFences();
       startRealGps();
     });
 
@@ -865,8 +1029,9 @@
         zoomSnap: 0.25
       }).setView(defaultCenter, 15);
 
-      switchBaseLayer('streets');
+      switchBaseLayer('satellite');
 
+      fencesLayer = L.layerGroup().addTo(map);
       markersLayer = L.layerGroup().addTo(map);
 
       // Rota: contorno preto por baixo + linha branca; trecho já percorrido em verde
@@ -929,8 +1094,8 @@
       const timer = setTimeout(() => { if (ctrl) ctrl.abort(); }, 45000); // servidor gratuito pode demorar a acordar
       try {
         if (!sessionUser) throw new Error('sem sessão');
-        const res = await fetch(`${API_BASE_URL}/routes?company_id=${sessionUser.company_id}`, {
-          cache: 'no-store',
+        // o "_=" evita resposta velha do cache do navegador
+        const res = await fetch(`${API_BASE_URL}/routes?company_id=${sessionUser.company_id}&_=${Date.now()}`, {
           signal: ctrl ? ctrl.signal : undefined
         });
         if (!res.ok) throw new Error('http ' + res.status);
@@ -952,25 +1117,48 @@
       }
     }
 
+    // Troca a rota em uso pela versão nova, sem cancelar a navegação
+    function applyRouteUpdate(item) {
+      const built = buildRouteData(item);
+      if (built.path.length < 2) return false;
+
+      waypoints = built.path;
+      rawSignals = built.sigList;
+      loadRouteVisuals();          // refaz linha, marcadores, indicações e cercas da rota
+      activeRouteFp = routeFp(item);
+      activeRouteName = item.name || 'Rota';
+      document.getElementById('searchInput').value = activeRouteName;
+      document.getElementById('routeSubStatus').innerText = `Navegando: ${activeRouteName}`;
+      prefetchRouteTiles();
+
+      if (navMethod === 'sim') renderSimFrame(0);
+      else if (userLat !== null && userLng !== null) trackUserOnRoute(userLat, userLng, null);
+      return true;
+    }
+
     let syncing = false;
     async function syncRoutes() {
       if (syncing) return;
       syncing = true;
       const icon = document.getElementById('syncIcon');
       icon.classList.add('fa-spin');
-      const ok = await fetchDatabaseRoutes(true);
+      const [ok] = await Promise.all([fetchDatabaseRoutes(true), fetchFences()]);
       icon.classList.remove('fa-spin');
       syncing = false;
 
       if (!ok) { notify('Sem conexão. Mantive as rotas salvas no aparelho.', 'warning'); return; }
 
-      // a rota que está em uso foi editada no sistema?
+      // a rota em uso foi editada no sistema? aplica na hora, sem cancelar
       if (isNavigating && activeRouteId) {
         const upd = dbRoutes.find(r => String(r.id) === activeRouteId);
         if (!upd) { notify('Rotas atualizadas. A rota em uso não existe mais no sistema.', 'warning'); return; }
-        if (routeFp(upd) !== activeRouteFp) { notify('Rotas atualizadas. A rota em uso foi alterada: cancele e selecione de novo.', 'warning'); return; }
+        if (routeFp(upd) !== activeRouteFp) {
+          if (applyRouteUpdate(upd)) notify('Rota em uso atualizada com as alterações', 'success');
+          else notify('A rota alterada ficou sem pontos suficientes. Mantive a anterior.', 'warning');
+          return;
+        }
       }
-      notify(`Rotas sincronizadas (${dbRoutes.length})`, 'success');
+      notify(`Rotas e cercas sincronizadas (${dbRoutes.length} rotas)`, 'success');
     }
 
     function updateRouteBadge(total) {
@@ -1148,12 +1336,14 @@
       headlightShownForTrip = false;
       activeRouteId = String(item.id);
       activeRouteFp = routeFp(item);
+      activeRouteName = name;
+      speedEma = 0; speedSamples = 0;
 
       if (waypoints.length >= 2) {
         currentBearing = calculateBearing(waypoints[0].lat, waypoints[0].lng, waypoints[1].lat, waypoints[1].lng);
       }
 
-      document.getElementById('modeSelectorRow').classList.remove('hidden');
+      if (SIM_UI) document.getElementById('modeSelectorRow').classList.remove('hidden');
       document.getElementById('navHud').classList.remove('hidden');
       document.getElementById('cancelNavBtn').classList.remove('hidden');
       document.getElementById('finishNavBtn').classList.add('hidden');
@@ -1219,6 +1409,7 @@
 
       generateInterpolatedRoute();
       computeSignals();
+      computeRouteFences();
       renderSignalMarkers();
     }
 
@@ -1250,7 +1441,7 @@
         pauseSim();
         document.getElementById('gpsStatusText').innerText = 'GPS Conectado';
         document.getElementById('gpsLiveDot').className = 'w-3 h-3 rounded-full bg-emerald-400';
-        notify('Retornando ao GPS Real do dispositivo', 'info');
+        if (SIM_UI) notify('Retornando ao GPS Real do dispositivo', 'info');
       }
     }
 
@@ -1396,6 +1587,10 @@
       trip = newTrip();
       activeRouteId = null;
       activeRouteFp = '';
+      activeRouteName = '';
+      routeFences = [];
+      lastFenceKey = '';
+      speedEma = 0; speedSamples = 0;
       headlightShownForTrip = false;
       closeHeadlightModal();
       releaseWakeLock();
@@ -1481,6 +1676,7 @@
       userLat = position.coords.latitude;
       userLng = position.coords.longitude;
       const speedKmh = position.coords.speed ? Math.round(position.coords.speed * 3.6) : 0;
+      if (speedKmh > 3) { speedEma = speedSamples ? speedEma * 0.9 + speedKmh * 0.1 : speedKmh; speedSamples++; }
       const deviceHeading = (typeof position.coords.heading === 'number' && !isNaN(position.coords.heading) && (position.coords.speed || 0) > 1.5)
         ? position.coords.heading
         : null;
@@ -1784,9 +1980,12 @@
 
       const baseKmh = navMethod === 'sim'
         ? (activeSpeedLimit || SIM_BASE_SPEED_KMH) * simSpeedMultiplier
-        : (currentSpeedKmh > 5 ? currentSpeedKmh : (activeSpeedLimit || 40));
-      const remainingMin = Math.round(((remainingDist / 1000) / (baseKmh || 1)) * 60);
-      document.getElementById('navRemainingTime').innerText = `${remainingMin} min`;
+        : etaSpeedKmh();
+      const remainingSec = ((remainingDist / 1000) / (baseKmh || 1)) * 3600;
+      document.getElementById('navRemainingTime').innerText = fmtRemaining(remainingSec);
+
+      const eta = new Date(Date.now() + remainingSec * 1000);
+      document.getElementById('navEta').innerText = fmtClock(eta) + (eta.toDateString() !== new Date().toDateString() ? ' (+1d)' : '');
 
       autoZoomTick();
     }
@@ -1956,7 +2155,19 @@
       const ip = interpolatedPoints[closestIndex];
       const seg = ip && ip.segmentIndex !== undefined ? ip.segmentIndex : 0;
       const wp = waypoints[Math.min(seg, waypoints.length - 1)];
-      const limit = wp && wp.speedLimit > 0 ? wp.speedLimit : null;
+      const roadLimit = wp && wp.speedLimit > 0 ? wp.speedLimit : null;
+
+      // dentro de uma cerca vale o menor limite entre a via e a cerca
+      const fz = fenceAt(coveredDist);
+      const limit = fz ? (roadLimit ? Math.min(roadLimit, fz.limit) : fz.limit) : roadLimit;
+
+      const fenceKey = fz ? `${fz.name}|${fz.enter}` : '';
+      if (fenceKey !== lastFenceKey) {
+        lastFenceKey = fenceKey;
+        document.getElementById('routeSubStatus').innerText = fz ? `Cerca: ${fz.name} · ${fz.limit} km/h` : `Navegando: ${activeRouteName}`;
+        document.getElementById('navLimitSign').classList.toggle('ring-4', !!fz);
+        document.getElementById('navLimitSign').classList.toggle('ring-rose-500', !!fz);
+      }
 
       activeSpeedLimit = limit;
       if (limit !== lastAnnouncedLimit) {
@@ -1992,6 +2203,18 @@
       box.classList.toggle('bg-rose-600/40', over);
       spd.classList.toggle('text-rose-300', over);
       spd.classList.toggle('text-brand-300', !over);
+
+      // cerca à frente: avisa 35 m antes de entrar
+      for (const r of routeFences) {
+        if (r.startsInside) continue;
+        const ahead = r.enter - coveredDist;
+        if (ahead > FENCE_WARN_M + 100) r.warned = false;   // voltou na simulação: rearma
+        if (!r.warned && ahead > 0 && ahead <= FENCE_WARN_M) {
+          r.warned = true;
+          notify(`Cerca à frente: ${r.name} (${r.limit} km/h)`, 'warning');
+          speakInstruction(`Cerca à frente. Limite de ${r.limit} quilômetros por hora.`, true);
+        }
+      }
 
       // 2) manobras: aviso a 300 m ("Em 300 metros, ...") e a 30 m só a ordem ("Vire à direita")
       for (const sig of signals) {
