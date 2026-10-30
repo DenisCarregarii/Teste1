@@ -1462,6 +1462,11 @@
         const c = Voice.q.shift();
         if (c.exp < Date.now()) continue;          // esperou demais: já não vale
         if (c.valid && !c.valid()) continue;       // a situação mudou: não faz mais sentido falar
+        if (typeof c.text === 'function') {
+          const t = c.text();
+          if (!t) continue;
+          c.text = t;
+        }
         it = c; break;
       }
       if (!it) return;
@@ -1535,6 +1540,7 @@
     }
 
 
+    const SIGNAL_FAR_LATEST = 100;   // aviso longo atrasado: abaixo disso só fala nos 30 m
     const SIGNAL_FAR = 300;        // "Em trezentos metros, vire à direita"
     const SIGNAL_NEAR = 30;        // só a ordem: "Vire à direita"
     const FENCE_WARN_M = 35;       // "Cerca à frente" 35 m antes de entrar
@@ -1692,9 +1698,16 @@
     // Avisos falados da simulação (mesma regra do GPS)
     function simSpeech(limit, fz) {
       // limite da via mudou (não repete o que a cerca já anunciou)
+      const fKey = fz ? `${fz.name}|${fz.enter}` : '';
+      const exited = !!sim.lastFenceKey && !fKey;
+      sim.lastFenceKey = fKey;
+      if (exited) {
+        notify('Saiu da cerca virtual', 'info');
+        simSay(`Saída da cerca virtual. Limite de ${limit} quilômetros por hora.`, { prio: 2, key: 'fenceexit', ttl: 6000 });
+      }
       if (limit !== sim.lastLimit) {
         sim.lastLimit = limit;
-        const jaDito = fz && fz.warned && limit === fz.limit;
+        const jaDito = (fz && fz.warned && limit === fz.limit) || exited;
         if (!jaDito) simSay(`Limite de velocidade, ${limit} quilômetros por hora.`, { prio: 1, key: 'limit', ttl: 6000 });
       }
 
@@ -1711,10 +1724,14 @@
       }
 
       // indicações: "Em trezentos metros, ..." e, a 30 m, só "Vire à direita"
-      for (const ev of sim.events) {
+      for (let ei = 0; ei < sim.events.length; ei++) {
+        const ev = sim.events[ei];
         const ahead = ev.d - sim.dist;
         if (ahead > SIGNAL_FAR + 100) ev.done = {};
         if (ahead <= 0) continue;
+        // duas indicações coladas (< 300 m): só fala a ordem nos 30 m
+        const prevEv = ei > 0 ? sim.events[ei - 1] : null;
+        if (prevEv && ev.d - prevEv.d < SIGNAL_FAR && !ev.done.far) ev.done.far = true;
         const body = maneuverSpeechBody(ev.code);
         if (ahead <= SIGNAL_NEAR) {
           if (!ev.done.near) {
@@ -1723,8 +1740,12 @@
           }
         } else if (ahead <= SIGNAL_FAR && !ev.done.far) {
           ev.done.far = true;
-          const dist = ahead >= 270 ? 300 : Math.max(50, Math.round(ahead / 50) * 50);
-          simSay(`Em ${dist === 300 ? 'trezentos' : dist} metros, ${body}.`, { prio: 2, key: 'far' + Math.round(ev.d), ttl: 10000, valid: () => !ev.done.near });
+          if (ahead > SIGNAL_FAR_LATEST) simSay(() => {
+            const now = ev.d - sim.dist;
+            if (now <= SIGNAL_FAR_LATEST) return null;
+            const dist = now >= 270 ? 300 : Math.max(100, Math.round(now / 50) * 50);
+            return `Em ${dist === 300 ? 'trezentos' : dist} metros, ${body}.`;
+          }, { prio: 2, key: 'far' + Math.round(ev.d), ttl: 10000, valid: () => !ev.done.near && (ev.d - sim.dist) > SIGNAL_FAR_LATEST });
         }
       }
 

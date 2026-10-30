@@ -710,6 +710,11 @@
         const c = Voice.q.shift();
         if (c.exp < Date.now()) continue;          // esperou demais: já não vale
         if (c.valid && !c.valid()) continue;       // a situação mudou: não faz mais sentido falar
+        if (typeof c.text === 'function') {        // texto montado na hora de falar (distância atual)
+          const t = c.text();
+          if (!t) continue;
+          c.text = t;
+        }
         it = c; break;
       }
       if (!it) return;
@@ -810,7 +815,7 @@
     let trip = null;
 
     function newTrip() {
-      return { started: false, startMs: 0, startCovered: 0, simSec: 0, arrived: false };
+      return { started: false, startMs: 0, startCovered: 0, simSec: 0, arrived: false, onRoute: false, off: 0 };
     }
     trip = newTrip();
 
@@ -1033,6 +1038,52 @@
 
     function etaSpeedKmh() {
       return (speedSamples >= 8 && speedEma > 5) ? speedEma : (activeSpeedLimit || DEFAULT_LIMIT_KMH);
+    }
+
+    // Previsão pelo "ritmo": quanto falta se andasse exatamente nos limites de cada trecho (e cercas),
+    // corrigido pela relação entre a velocidade praticada e o limite que valia naquele momento.
+    //   ritmo 1,00 = anda no limite | 0,85 = 15% abaixo | 1,10 = 10% acima
+    let paceEma = 0, paceSamples = 0;
+    const PACE_MIN = 0.3, PACE_MAX = 1.5, PACE_MIN_SAMPLES = 10;
+    let etaSrc = null, etaFen = null, etaSuffix = [], etaStep = [];
+
+    function paceFactor() {
+      return paceSamples >= PACE_MIN_SAMPLES ? paceEma : 1;
+    }
+
+    function pacePush(speedKmh) {
+      if (!(speedKmh > 3) || !(activeSpeedLimit > 0)) return;
+      const r = Math.min(PACE_MAX, Math.max(PACE_MIN, speedKmh / activeSpeedLimit));
+      paceEma = paceSamples ? paceEma * 0.92 + r * 0.08 : r;
+      paceSamples++;
+    }
+
+    function buildEtaTable() {
+      const n = interpolatedPoints.length;
+      etaSrc = interpolatedPoints; etaFen = routeFences;
+      etaStep = new Array(n).fill(0);
+      etaSuffix = new Array(n + 1).fill(0);
+      for (let i = 0; i < n - 1; i++) {
+        const a = cumulativeDistances[i], b = cumulativeDistances[i + 1];
+        const wp = waypoints[Math.min(interpolatedPoints[i + 1].segmentIndex || 0, waypoints.length - 1)];
+        let kmh = wp && wp.speedLimit > 0 ? wp.speedLimit : DEFAULT_LIMIT_KMH;
+        const fz = fenceAt((a + b) / 2);
+        if (fz && fz.limit < kmh) kmh = fz.limit;
+        etaStep[i] = (b - a) / (kmh / 3.6);
+      }
+      for (let i = n - 2; i >= 0; i--) etaSuffix[i] = etaSuffix[i + 1] + etaStep[i];
+    }
+
+    // segundos restantes andando nos limites, a partir de 'covered' metros
+    function remainingSecAtLimits(covered) {
+      if (etaSrc !== interpolatedPoints || etaFen !== routeFences) buildEtaTable();
+      const n = interpolatedPoints.length;
+      if (n < 2) return 0;
+      const i = Math.min(n - 2, Math.max(0, indexAtDistance(covered)));
+      const into = Math.max(0, covered - cumulativeDistances[i]);
+      const seg = cumulativeDistances[i + 1] - cumulativeDistances[i];
+      const frac = seg > 0 ? Math.min(1, into / seg) : 0;
+      return etaSuffix[i + 1] + etaStep[i] * (1 - frac);
     }
 
     function fmtClock(d) {
@@ -1369,7 +1420,7 @@
       activeRouteId = String(item.id);
       activeRouteFp = routeFp(item);
       activeRouteName = name;
-      speedEma = 0; speedSamples = 0;
+      speedEma = 0; speedSamples = 0; paceEma = 0; paceSamples = 0;
 
       if (waypoints.length >= 2) {
         currentBearing = calculateBearing(waypoints[0].lat, waypoints[0].lng, waypoints[1].lat, waypoints[1].lng);
@@ -1624,7 +1675,7 @@
       legs = [];
       routeFences = [];
       lastFenceKey = '';
-      speedEma = 0; speedSamples = 0;
+      speedEma = 0; speedSamples = 0; paceEma = 0; paceSamples = 0;
       headlightShownForTrip = false;
       closeHeadlightModal();
       releaseWakeLock();
@@ -1711,6 +1762,7 @@
       userLng = position.coords.longitude;
       const speedKmh = position.coords.speed ? Math.round(position.coords.speed * 3.6) : 0;
       if (speedKmh > 3) { speedEma = speedSamples ? speedEma * 0.9 + speedKmh * 0.1 : speedKmh; speedSamples++; }
+      pacePush(speedKmh);
       const deviceHeading = (typeof position.coords.heading === 'number' && !isNaN(position.coords.heading) && (position.coords.speed || 0) > 1.5)
         ? position.coords.heading
         : null;
@@ -1781,7 +1833,7 @@
       realGpsWatchId = navigator.geolocation.watchPosition(
         onGpsPosition,
         onGpsError,
-        { enableHighAccuracy: true, maximumAge: 1000, timeout: 20000 }
+        { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 }
       );
     }
 
@@ -1945,6 +1997,8 @@
       setCameraTarget(lat, lng, heading, snap);
     }
 
+    const ON_ROUTE_M = 60, OFF_ROUTE_CANCEL_M = 180, OFF_ROUTE_FIXES = 3;
+
     function trackUserOnRoute(lat, lng, deviceHeading) {
       let minDistance = Infinity;
       let closestIndex = 0;
@@ -1957,8 +2011,22 @@
         }
       }
 
-      if (minDistance > 60) {
+      if (minDistance <= ON_ROUTE_M) { trip.onRoute = true; trip.off = 0; }
+
+      if (minDistance > ON_ROUTE_M) {
         notify('Atenção: Fora da rota traçada', 'warning');
+      }
+
+      // longe demais da rota (e já esteve nela): cancela, a linha some da tela
+      if (trip.onRoute && minDistance > OFF_ROUTE_CANCEL_M) {
+        if (++trip.off >= OFF_ROUTE_FIXES) {
+          cancelRoute();
+          notify('Rota cancelada: você saiu do trajeto', 'warning');
+          say('Rota cancelada. Você saiu do trajeto.', { prio: 3, key: 'offroute', ttl: 6000 });
+          return;
+        }
+      } else if (minDistance <= OFF_ROUTE_CANCEL_M) {
+        trip.off = 0;
       }
 
       // Sobre a rota, a direção do trecho é mais estável que a bússola/heading do GPS
@@ -2021,10 +2089,8 @@
         }
       }
 
-      const baseKmh = navMethod === 'sim'
-        ? (activeSpeedLimit || SIM_BASE_SPEED_KMH) * simSpeedMultiplier
-        : etaSpeedKmh();
-      const remainingSec = ((remainingDist / 1000) / (baseKmh || 1)) * 3600;
+      const atLimits = remainingSecAtLimits(coveredDist);
+      const remainingSec = atLimits / ((navMethod === 'sim' ? simSpeedMultiplier : paceFactor()) || 1);
       document.getElementById('navRemainingTime').innerText = fmtRemaining(remainingSec);
 
       const eta = new Date(Date.now() + remainingSec * 1000);
@@ -2185,13 +2251,20 @@
     const SIGNAL_FAR = 300;   // "Em trezentos metros, vire à direita"
     const SIGNAL_NEAR = 30;   // só a ordem: "Vire à direita"
 
+    let lastCoveredDist = 0;
+    const SIGNAL_FAR_LATEST = 100;   // aviso longo atrasado: se já falta menos que isso, só fala nos 30 m
+
     function announceSignal(sig, ahead) {
-      // normalmente "300 metros"; se a rota começou mais perto, fala a distância real arredondada
-      const dist = ahead >= 270 ? 300 : Math.max(50, Math.round(ahead / 50) * 50);
-      const distTxt = dist === 300 ? 'trezentos' : String(dist);
-      say(`Em ${distTxt} metros, ${maneuverSpeechBody(sig)}.`, {
+      // a distância é calculada na hora de falar (a fila pode atrasar o aviso)
+      say(() => {
+        const now = sig.along - lastCoveredDist;
+        if (now <= SIGNAL_FAR_LATEST) return null;
+        const dist = now >= 270 ? 300 : Math.max(100, Math.round(now / 50) * 50);
+        const distTxt = dist === 300 ? 'trezentos' : String(dist);
+        return `Em ${distTxt} metros, ${maneuverSpeechBody(sig)}.`;
+      }, {
         prio: 2, key: 'far' + Math.round(sig.along), ttl: 10000,
-        valid: () => !sig.done.near            // se já está em cima da curva, o aviso longo perde o sentido
+        valid: () => !sig.done.near && (sig.along - lastCoveredDist) > SIGNAL_FAR_LATEST
       });
     }
 
@@ -2241,7 +2314,9 @@
       const limit = fz ? (roadLimit ? Math.min(roadLimit, fz.limit) : fz.limit) : roadLimit;
 
       const fenceKey = fz ? `${fz.name}|${fz.enter}` : '';
+      let fenceExited = false;
       if (fenceKey !== lastFenceKey) {
+        fenceExited = !!lastFenceKey && !fenceKey;   // estava dentro de uma cerca e saiu
         lastFenceKey = fenceKey;
         document.getElementById('routeSubStatus').innerText = fz ? `Cerca: ${fz.name} · ${fz.limit} km/h` : `Navegando: ${activeRouteName}`;
         document.getElementById('navLimitSign').classList.toggle('ring-4', !!fz);
@@ -2254,7 +2329,14 @@
         overspeedActive = false; // limite novo: reavalia o excesso de velocidade
         // dentro de cerca já avisada ("Cerca à frente. Limite de X"): não repete o limite
         const jaDito = fz && fz.warned && limit === fz.limit;
-        if (limit && !jaDito) announceSpeedLimit(limit);
+        if (limit && !jaDito && !fenceExited) announceSpeedLimit(limit);
+      }
+
+      // saiu da cerca virtual: avisa e já diz o limite que volta a valer
+      if (fenceExited) {
+        notify('Saiu da cerca virtual', 'info');
+        say(limit ? `Saída da cerca virtual. Limite de ${limit} quilômetros por hora.` : 'Saída da cerca virtual.',
+          { prio: 2, key: 'fenceexit', ttl: 6000 });
       }
 
       // Placa de limite no topo + alerta de excesso (só com GPS real)
@@ -2268,11 +2350,11 @@
 
       // Excesso de velocidade (GPS real ou simulação 2x/4x): avisa UMA vez ao passar do limite.
       // Só avisa de novo depois que a velocidade voltar ao limite (ou abaixo) e passar outra vez.
-      const isOver = !!limit && currentSpeedKmh > limit + 2;
+      const isOver = !!limit && currentSpeedKmh > limit;
       const backUnder = !limit || currentSpeedKmh <= limit;
       if (isOver && !overspeedActive) {
         overspeedActive = true;
-        say('Acima do limite de velocidade.', { prio: 1, key: 'over', ttl: 4000, valid: () => overspeedActive });
+        say('Acima do limite de velocidade.', { prio: 2, key: 'over', ttl: 4000, valid: () => overspeedActive });
       } else if (backUnder) {
         overspeedActive = false;
       }
@@ -2298,12 +2380,19 @@
       }
 
       // 2) manobras: aviso a 300 m ("Em 300 metros, ...") e a 30 m só a ordem ("Vire à direita")
-      for (const sig of signals) {
+      lastCoveredDist = coveredDist;
+      for (let si = 0; si < signals.length; si++) {
+        const sig = signals[si];
         const ahead = sig.along - coveredDist;
 
         // voltou na simulação: rearma os avisos
         if (ahead > SIGNAL_FAR + 100) sig.done = {};
         if (ahead <= 0) continue;
+
+        // duas indicações coladas (menos de 300 m entre elas): o aviso longo cairia em cima da anterior,
+        // então só fala a ordem quando chegar perto (30 m)
+        const prevSig = si > 0 ? signals[si - 1] : null;
+        if (prevSig && sig.along - prevSig.along < SIGNAL_FAR && !sig.done.far) sig.done.far = true;
 
         if (ahead <= SIGNAL_NEAR) {
           if (!sig.done.near) {
@@ -2313,7 +2402,7 @@
           }
         } else if (ahead <= SIGNAL_FAR && !sig.done.far) {
           sig.done.far = true;
-          announceSignal(sig, ahead);
+          if (ahead > SIGNAL_FAR_LATEST) announceSignal(sig, ahead);
         }
       }
 
