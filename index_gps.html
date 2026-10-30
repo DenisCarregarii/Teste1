@@ -661,8 +661,10 @@
     // ========================================================
     const Voice = {
       ok: ('speechSynthesis' in window) && typeof SpeechSynthesisUtterance !== 'undefined',
-      voice: null, unlocked: false, q: [], cur: null, timer: null, holdUntil: 0
+      voice: null, unlocked: false,
+      q: [], seq: 0, cur: null, curItem: null, curPrio: 0, curStart: 0, curEst: 0, timer: null, pump: null, gapUntil: 0
     };
+    const VOICE_GAP_MS = 400;   // respiro entre uma fala e a seguinte
 
     function pickVoice() {
       if (!Voice.ok) return;
@@ -690,24 +692,46 @@
     }
     ['pointerdown', 'touchstart', 'click', 'keydown'].forEach(ev => document.addEventListener(ev, unlockVoice, { passive: true }));
 
-    function voiceNext() {
-      if (!Voice.ok || Voice.cur || !Voice.q.length) return;
-      const wait = Voice.holdUntil - Date.now();
-      if (wait > 0) { setTimeout(voiceNext, wait + 5); return; }
+    function cutCurrent() {
+      Voice.cur = null;
+      clearTimeout(Voice.timer);
+      try { window.speechSynthesis.cancel(); } catch (e) {}
+      Voice.gapUntil = Date.now() + 120; // folga depois do cancel (evita fala descartada)
+    }
 
-      const text = Voice.q.shift();
+    // Uma fala por vez, sempre. Pega a próxima da fila por prioridade e descarta o que ficou velho.
+    function voiceNext() {
+      if (!Voice.ok || Voice.cur) return;
+      const wait = Voice.gapUntil - Date.now();
+      if (wait > 0) { clearTimeout(Voice.pump); Voice.pump = setTimeout(voiceNext, wait + 5); return; }
+
+      let it = null;
+      while (Voice.q.length) {
+        const c = Voice.q.shift();
+        if (c.exp < Date.now()) continue;          // esperou demais: já não vale
+        if (c.valid && !c.valid()) continue;       // a situação mudou: não faz mais sentido falar
+        it = c; break;
+      }
+      if (!it) return;
+
       const id = {};
       Voice.cur = id;
+      Voice.curItem = it;
+      Voice.curPrio = it.prio;
+      Voice.curStart = Date.now();
+      Voice.curEst = 600 + it.text.length * 70;
+
       const done = () => {
         if (Voice.cur !== id) return;
         clearTimeout(Voice.timer);
         Voice.cur = null;
+        Voice.gapUntil = Date.now() + VOICE_GAP_MS;
         voiceNext();
       };
       try {
         const synth = window.speechSynthesis;
         if (synth.paused) synth.resume();
-        const u = new SpeechSynthesisUtterance(text);
+        const u = new SpeechSynthesisUtterance(it.text);
         u.lang = 'pt-BR';
         u.rate = 1.05;
         u.pitch = 1.0;
@@ -720,26 +744,33 @@
           if (Voice.cur !== id) return;
           try { synth.cancel(); } catch (e) {}
           done();
-        }, 4000 + text.length * 120);
+        }, 4000 + it.text.length * 120);
         synth.speak(u);
       } catch (e) {
         Voice.cur = null;
       }
     }
 
-    // queue=false: interrompe o que estiver falando e fala já. queue=true: entra na fila.
-    function speakInstruction(text, queue = false) {
+    // Prioridade: 3 = urgente ("Vire à direita"), 2 = aviso de trajeto, 1 = informativo (limite, excesso).
+    //  key   : mensagem repetida substitui a pendente com a mesma chave
+    //  ttl   : depois desse tempo na fila a mensagem é descartada
+    //  valid : função que confirma, na hora de falar, se ainda faz sentido
+    function say(text, opts = {}) {
       if (!Voice.ok) return;
-      if (!queue) {
-        Voice.q = [];
-        if (Voice.cur) {
-          Voice.cur = null;
-          clearTimeout(Voice.timer);
-          try { window.speechSynthesis.cancel(); } catch (e) {}
-          Voice.holdUntil = Date.now() + 80; // folga depois do cancel (evita fala descartada)
+      const it = { text, prio: opts.prio || 1, key: opts.key || null, exp: Date.now() + (opts.ttl || 15000), valid: opts.valid || null, seq: ++Voice.seq };
+      if (it.key) Voice.q = Voice.q.filter(x => x.key !== it.key);
+      Voice.q.push(it);
+      Voice.q.sort((a, b) => b.prio - a.prio || a.seq - b.seq);
+      // urgente não espera uma informação longa: corta só o que for informativo e ainda demorar
+      if (Voice.cur && it.prio >= 3 && Voice.curPrio <= 1 && Voice.curStart + Voice.curEst - Date.now() > 1200) {
+        const back = Voice.curItem;
+        cutCurrent();
+        // a informação cortada volta para a fila e é falada depois da instrução urgente
+        if (back && !Voice.q.some(x => x.key && x.key === back.key)) {
+          Voice.q.push(back);
+          Voice.q.sort((a, b) => b.prio - a.prio || a.seq - b.seq);
         }
       }
-      Voice.q.push(text);
       voiceNext();
     }
 
@@ -747,6 +778,7 @@
       Voice.q = [];
       Voice.cur = null;
       clearTimeout(Voice.timer);
+      clearTimeout(Voice.pump);
       try { if (Voice.ok) window.speechSynthesis.cancel(); } catch (e) {}
     }
 
@@ -838,7 +870,7 @@
 
       document.getElementById('finishNavBtn').classList.remove('hidden');
       document.getElementById('arrivalModal').classList.remove('hidden');
-      speakInstruction('Você chegou ao seu destino.');
+      say('Você chegou ao seu destino.', { prio: 3, key: 'arrival' });
     }
 
     // ========================================================
@@ -862,7 +894,7 @@
       const btn = document.getElementById('headlightBtn');
       btn.innerText = `Entendi (${n})`;
       document.getElementById('headlightModal').classList.remove('hidden');
-      speakInstruction('Lembre-se de ligar os faróis.', true);
+      say('Lembre-se de ligar os faróis.', { prio: 1, key: 'lights', ttl: 8000 });
 
       clearInterval(headlightTimer);
       headlightTimer = setInterval(() => {
@@ -1362,7 +1394,8 @@
 
       unlockVoice();
       if (!Voice.ok) notify('Este navegador não tem voz. Abra a página no Chrome ou Safari.', 'warning');
-      speakInstruction('Iniciando rota. Siga em frente pelo trajeto.');
+      stopSpeaking();
+      say('Iniciando rota. Siga em frente pelo trajeto.', { prio: 2, key: 'start' });
       requestWakeLock();
       checkHeadlights();
       notify(`Rota selecionada! GPS em andamento.`, 'success');
@@ -1588,6 +1621,7 @@
       activeRouteId = null;
       activeRouteFp = '';
       activeRouteName = '';
+      legs = [];
       routeFences = [];
       lastFenceKey = '';
       speedEma = 0; speedSamples = 0;
@@ -1881,19 +1915,28 @@
 
     function updateVehicle(lat, lng, heading = null, snap = false) {
       if (!vehicleMarker) {
+        // Seta facetada (duas faces azuis), sem fundo; contorno claro para destacar no satélite
         const vehicleHtml = `
-          <div class="relative flex items-center justify-center">
-            <div class="absolute w-12 h-12 rounded-full bg-brand-500/30 sonar-wave"></div>
-            <div class="w-10 h-10 rounded-full bg-brand-600 border-2 border-white shadow-2xl flex items-center justify-center text-white text-base vehicle-marker-wrapper" id="vehicleIndicator">
-              <i class="fa-solid fa-arrow-up"></i>
+          <div class="relative flex items-center justify-center" style="width:56px;height:56px">
+            <div class="absolute w-16 h-16 rounded-full bg-sky-400/15 sonar-wave"></div>
+            <div id="vehicleIndicator" class="vehicle-marker-wrapper" style="width:52px;height:52px;filter:drop-shadow(0 3px 3px rgba(0,0,0,.5))">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="52" height="52">
+                <defs>
+                  <linearGradient id="vgL" x1="0" y1="0" x2="0.9" y2="1"><stop offset="0" stop-color="#1a3f78"/><stop offset="1" stop-color="#0a1c3f"/></linearGradient>
+                  <linearGradient id="vgR" x1="0.1" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4a86cf"/><stop offset="1" stop-color="#1d4c8c"/></linearGradient>
+                </defs>
+                <path d="M50 4 L5 92 L50 70 Z" fill="url(#vgL)"/>
+                <path d="M50 4 L95 92 L50 70 Z" fill="url(#vgR)"/>
+                <path d="M50 4 L95 92 L50 70 L5 92 Z" fill="none" stroke="rgba(255,255,255,.75)" stroke-width="2.4" stroke-linejoin="round"/>
+              </svg>
             </div>
           </div>
         `;
         const icon = L.divIcon({
           html: vehicleHtml,
           className: '',
-          iconSize: [40, 40],
-          iconAnchor: [20, 20]
+          iconSize: [56, 56],
+          iconAnchor: [28, 28]
         });
         vehicleMarker = L.marker([lat, lng], { icon, zIndexOffset: 2000 }).addTo(map);
         snap = true;
@@ -2081,6 +2124,15 @@
       signals = rawSignals
         .map(m => Object.assign({}, m, { along: m.at, done: {} }))
         .sort((a, b) => a.along - b.along);
+
+      // trechos com mais de 1 km entre início → 1ª indicação → ... → destino
+      legs = [];
+      const pts = [{ along: 0 }, ...signals, { along: totalRouteDistanceMeters }];
+      for (let i = 0; i < pts.length - 1; i++) {
+        if (pts[i + 1].along - pts[i].along > LONG_LEG_M) {
+          legs.push({ from: pts[i].along, to: pts[i + 1].along, target: pts[i + 1], spoken: false });
+        }
+      }
     }
 
     const ORD_WORDS = ['', 'primeira', 'segunda', 'terceira', 'quarta', 'quinta', 'sexta'];
@@ -2137,17 +2189,44 @@
       // normalmente "300 metros"; se a rota começou mais perto, fala a distância real arredondada
       const dist = ahead >= 270 ? 300 : Math.max(50, Math.round(ahead / 50) * 50);
       const distTxt = dist === 300 ? 'trezentos' : String(dist);
-      speakInstruction(`Em ${distTxt} metros, ${maneuverSpeechBody(sig)}.`, true);
+      say(`Em ${distTxt} metros, ${maneuverSpeechBody(sig)}.`, {
+        prio: 2, key: 'far' + Math.round(sig.along), ttl: 10000,
+        valid: () => !sig.done.near            // se já está em cima da curva, o aviso longo perde o sentido
+      });
     }
 
     function announceSignalNow(sig) {
       const body = maneuverSpeechBody(sig);
-      speakInstruction(body.charAt(0).toUpperCase() + body.slice(1) + '.', false);
+      say(body.charAt(0).toUpperCase() + body.slice(1) + '.', { prio: 3, key: 'near' + Math.round(sig.along), ttl: 4000 });
+    }
+
+    // ---- trecho longo sem indicação: "Siga por 17 quilômetros até virar à direita"
+    const LONG_LEG_M = 1000;       // acima disso, avisa quanto falta
+    const LONG_LEG_AFTER_M = 50;   // 50 m depois da indicação anterior
+    let legs = [];
+
+    function fmtKmSpeech(m) {
+      const km = m / 1000;
+      if (km >= 10) return `${Math.round(km)} quilômetros`;
+      const r = Math.round(km * 10) / 10;
+      if (r === 1) return '1 quilômetro';
+      return `${String(r).replace('.', ',')} quilômetros`;
+    }
+
+    function untilPhrase(t) {
+      if (!t || !t.type) return 'o destino';
+      const side = t.dir === 'left' ? 'esquerda' : 'direita';
+      if (t.type === 'roundabout') return `chegar à rotatória e pegar a ${ORD_WORDS[t.exit] || t.exit} saída`;
+      if (t.type === 'uturn') return 'fazer o retorno';
+      const ang = Math.abs(t.angle || 90);
+      if (ang < 60) return `fazer a curva leve à ${side}`;
+      if (ang >= 120) return `fazer a curva fechada à ${side}`;
+      return `virar à ${side}`;
     }
 
     // Velocidade: só fala quando o limite da via MUDA
     function announceSpeedLimit(limit) {
-      speakInstruction(`Limite de velocidade, ${limit} quilômetros por hora.`, true);
+      say(`Limite de velocidade, ${limit} quilômetros por hora.`, { prio: 1, key: 'limit', ttl: 6000 });
     }
 
     function processSignals(coveredDist, closestIndex) {
@@ -2173,7 +2252,9 @@
       if (limit !== lastAnnouncedLimit) {
         lastAnnouncedLimit = limit;
         overspeedActive = false; // limite novo: reavalia o excesso de velocidade
-        if (limit) announceSpeedLimit(limit);
+        // dentro de cerca já avisada ("Cerca à frente. Limite de X"): não repete o limite
+        const jaDito = fz && fz.warned && limit === fz.limit;
+        if (limit && !jaDito) announceSpeedLimit(limit);
       }
 
       // Placa de limite no topo + alerta de excesso (só com GPS real)
@@ -2191,7 +2272,7 @@
       const backUnder = !limit || currentSpeedKmh <= limit;
       if (isOver && !overspeedActive) {
         overspeedActive = true;
-        speakInstruction('Acima do limite de velocidade.', true);
+        say('Acima do limite de velocidade.', { prio: 1, key: 'over', ttl: 4000, valid: () => overspeedActive });
       } else if (backUnder) {
         overspeedActive = false;
       }
@@ -2212,7 +2293,7 @@
         if (!r.warned && ahead > 0 && ahead <= FENCE_WARN_M) {
           r.warned = true;
           notify(`Cerca à frente: ${r.name} (${r.limit} km/h)`, 'warning');
-          speakInstruction(`Cerca à frente. Limite de ${r.limit} quilômetros por hora.`, true);
+          say(`Cerca à frente. Limite de ${r.limit} quilômetros por hora.`, { prio: 2, key: 'fence' + Math.round(r.enter), ttl: 6000 });
         }
       }
 
@@ -2233,6 +2314,16 @@
         } else if (ahead <= SIGNAL_FAR && !sig.done.far) {
           sig.done.far = true;
           announceSignal(sig, ahead);
+        }
+      }
+
+      // trecho longo sem indicação: 50 m depois da indicação anterior, diz quanto falta até a próxima
+      for (const lg of legs) {
+        if (coveredDist < lg.from - 100) lg.spoken = false;   // voltou na simulação: rearma
+        const remaining = lg.to - coveredDist;
+        if (!lg.spoken && coveredDist >= lg.from + LONG_LEG_AFTER_M && remaining > LONG_LEG_M) {
+          lg.spoken = true;
+          say(`Siga por ${fmtKmSpeech(remaining)} até ${untilPhrase(lg.target)}.`, { prio: 2, key: 'leg' + Math.round(lg.from), ttl: 15000 });
         }
       }
     }
