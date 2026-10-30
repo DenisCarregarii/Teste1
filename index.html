@@ -776,6 +776,11 @@
       if (appMode === 'tracking') {
         setAppMode('idle');
       } else {
+        // só o monitoramento fica: fecha a rota em tela, a edição e a cerca em desenho
+        if (hasUnsavedRoute() && !confirm('Há alterações não salvas nesta rota. Descartar e abrir o monitoramento?')) return;
+        if (appMode === 'fence') clearCurrentFenceDraft();
+        closeIndicationMenu(false);
+        if (waypoints.length || editingRouteId) clearCurrentRoute(false);
         hasAutoCenteredTracking = false;
         setAppMode('tracking');
       }
@@ -1156,7 +1161,8 @@
       const btn = 'px-2.5 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1.5 ';
       $('routeBannerActions').innerHTML = routeLocked
         ? `<button onclick="enableRouteEditing()" class="${btn}bg-white text-indigo-700 hover:bg-indigo-50"><i class="fa-solid fa-pen-to-square"></i>Editar</button>
-           <button onclick="clearCurrentRoute(false)" class="${btn}bg-indigo-800/70 text-indigo-100 hover:bg-indigo-800">Nova rota</button>`
+           <button onclick="clearCurrentRoute(false)" class="${btn}bg-indigo-800/70 text-indigo-100 hover:bg-indigo-800">Nova rota</button>
+           <button onclick="closeViewedRoute()" title="Fechar a rota e tirar da tela" class="${btn}bg-rose-500/90 text-white hover:bg-rose-500"><i class="fa-solid fa-xmark"></i>Cancelar</button>`
         : `<button onclick="openSaveModal()" class="${btn}bg-emerald-500 text-white hover:bg-emerald-400"><i class="fa-solid fa-floppy-disk"></i>Salvar alterações</button>
            <button onclick="cancelEditingRoute()" class="${btn}bg-indigo-800/70 text-indigo-100 hover:bg-indigo-800">Cancelar</button>`;
       updateToolbarState();
@@ -1203,6 +1209,20 @@
       if (typeof sim !== 'undefined' && sim.open) closeSimulation();
       renderRouteBanner();
       refreshRouteVisuals();
+    }
+
+    // Fecha a rota que está na tela (visualização) e esconde tudo que é de edição
+    function closeViewedRoute() {
+      closeIndicationMenu(false);
+      clearCurrentRoute(false);
+      setAppMode('idle');
+    }
+
+    // Há trajeto ainda não salvo (rota nova desenhada ou rota carregada com alterações)?
+    function hasUnsavedRoute() {
+      if (routeLocked) return false;
+      if (editingRouteId) return JSON.stringify(waypoints) !== JSON.stringify(routeSnapshot);
+      return waypoints.length > 0;
     }
 
     function fitRouteBounds() { if (waypoints.length > 0) map.fitBounds(L.latLngBounds(waypoints.map(p => [p.lat, p.lng])), { padding: [60, 60] }); }
@@ -1387,27 +1407,231 @@
       } catch (e) {}
     }
 
-    // SIMULAÇÃO DA ROTA (velocidade pelo limite do trecho/cerca, indicações e voz)
-    const sim = { open: false, playing: false, dist: 0, factor: 4, follow: true, voice: true, total: 0, s: [], events: [], said: new Set(), speed: 0, raf: 0, last: 0, marker: null, heading: 0, endSaid: false };
+    // ========================================================
+    // 🔊 VOZ DA SIMULAÇÃO: mesmo agendador do GPS (uma fala por vez, por prioridade,
+    // descarta o que ficou velho e não repete o que já foi dito)
+    // ========================================================
+    const Voice = {
+      ok: ('speechSynthesis' in window) && typeof SpeechSynthesisUtterance !== 'undefined',
+      voice: null, unlocked: false,
+      q: [], seq: 0, cur: null, curItem: null, curPrio: 0, curStart: 0, curEst: 0, timer: null, pump: null, gapUntil: 0
+    };
+    const VOICE_GAP_MS = 400;   // respiro entre uma fala e a seguinte
 
-    function speakSim(text) {
-      if (!sim.voice || !('speechSynthesis' in window)) return;
+    function pickVoice() {
+      if (!Voice.ok) return;
       try {
-        window.speechSynthesis.cancel();
-        const u = new SpeechSynthesisUtterance(text);
-        u.lang = 'pt-BR'; u.rate = 1.05;
-        window.speechSynthesis.speak(u);
+        const vs = window.speechSynthesis.getVoices() || [];
+        Voice.voice = vs.find(v => v.lang === 'pt-BR') || vs.find(v => /^pt/i.test(v.lang)) || null;
       } catch (e) {}
     }
+    if (Voice.ok) {
+      pickVoice();
+      try { window.speechSynthesis.addEventListener('voiceschanged', pickVoice); } catch (e) {}
+    }
+
+    // O navegador só libera a voz depois de um toque do usuário: "acorda" a voz em silêncio
+    function unlockVoice() {
+      if (!Voice.ok || Voice.unlocked) return;
+      try {
+        const u = new SpeechSynthesisUtterance(' ');
+        u.volume = 0;
+        u.lang = 'pt-BR';
+        if (Voice.voice) u.voice = Voice.voice;
+        window.speechSynthesis.speak(u);
+        Voice.unlocked = true;
+      } catch (e) {}
+    }
+    ['pointerdown', 'touchstart', 'click', 'keydown'].forEach(ev => document.addEventListener(ev, unlockVoice, { passive: true }));
+
+    function cutCurrent() {
+      Voice.cur = null;
+      clearTimeout(Voice.timer);
+      try { window.speechSynthesis.cancel(); } catch (e) {}
+      Voice.gapUntil = Date.now() + 120; // folga depois do cancel (evita fala descartada)
+    }
+
+    // Uma fala por vez, sempre. Pega a próxima da fila por prioridade e descarta o que ficou velho.
+    function voiceNext() {
+      if (!Voice.ok || Voice.cur) return;
+      const wait = Voice.gapUntil - Date.now();
+      if (wait > 0) { clearTimeout(Voice.pump); Voice.pump = setTimeout(voiceNext, wait + 5); return; }
+
+      let it = null;
+      while (Voice.q.length) {
+        const c = Voice.q.shift();
+        if (c.exp < Date.now()) continue;          // esperou demais: já não vale
+        if (c.valid && !c.valid()) continue;       // a situação mudou: não faz mais sentido falar
+        it = c; break;
+      }
+      if (!it) return;
+
+      const id = {};
+      Voice.cur = id;
+      Voice.curItem = it;
+      Voice.curPrio = it.prio;
+      Voice.curStart = Date.now();
+      Voice.curEst = 600 + it.text.length * 70;
+
+      const done = () => {
+        if (Voice.cur !== id) return;
+        clearTimeout(Voice.timer);
+        Voice.cur = null;
+        Voice.gapUntil = Date.now() + VOICE_GAP_MS;
+        voiceNext();
+      };
+      try {
+        const synth = window.speechSynthesis;
+        if (synth.paused) synth.resume();
+        const u = new SpeechSynthesisUtterance(it.text);
+        u.lang = 'pt-BR';
+        u.rate = 1.05;
+        u.pitch = 1.0;
+        u.volume = 1;
+        if (Voice.voice) u.voice = Voice.voice;
+        u.onend = done;
+        u.onerror = done;
+        // se o navegador travar e nunca avisar que terminou, destrava a fila
+        Voice.timer = setTimeout(() => {
+          if (Voice.cur !== id) return;
+          try { synth.cancel(); } catch (e) {}
+          done();
+        }, 4000 + it.text.length * 120);
+        synth.speak(u);
+      } catch (e) {
+        Voice.cur = null;
+      }
+    }
+
+    // Prioridade: 3 = urgente ("Vire à direita"), 2 = aviso de trajeto, 1 = informativo (limite, excesso).
+    //  key   : mensagem repetida substitui a pendente com a mesma chave
+    //  ttl   : depois desse tempo na fila a mensagem é descartada
+    //  valid : função que confirma, na hora de falar, se ainda faz sentido
+    function say(text, opts = {}) {
+      if (!Voice.ok) return;
+      const it = { text, prio: opts.prio || 1, key: opts.key || null, exp: Date.now() + (opts.ttl || 15000), valid: opts.valid || null, seq: ++Voice.seq };
+      if (it.key) Voice.q = Voice.q.filter(x => x.key !== it.key);
+      Voice.q.push(it);
+      Voice.q.sort((a, b) => b.prio - a.prio || a.seq - b.seq);
+      // urgente não espera uma informação longa: corta só o que for informativo e ainda demorar
+      if (Voice.cur && it.prio >= 3 && Voice.curPrio <= 1 && Voice.curStart + Voice.curEst - Date.now() > 1200) {
+        const back = Voice.curItem;
+        cutCurrent();
+        // a informação cortada volta para a fila e é falada depois da instrução urgente
+        if (back && !Voice.q.some(x => x.key && x.key === back.key)) {
+          Voice.q.push(back);
+          Voice.q.sort((a, b) => b.prio - a.prio || a.seq - b.seq);
+        }
+      }
+      voiceNext();
+    }
+
+    function stopSpeaking() {
+      Voice.q = [];
+      Voice.cur = null;
+      clearTimeout(Voice.timer);
+      clearTimeout(Voice.pump);
+      try { if (Voice.ok) window.speechSynthesis.cancel(); } catch (e) {}
+    }
+
+
+    const SIGNAL_FAR = 300;        // "Em trezentos metros, vire à direita"
+    const SIGNAL_NEAR = 30;        // só a ordem: "Vire à direita"
+    const FENCE_WARN_M = 35;       // "Cerca à frente" 35 m antes de entrar
+    const LONG_LEG_M = 1000;       // trecho longo sem indicação
+    const LONG_LEG_AFTER_M = 50;   // fala 50 m depois da indicação anterior
+
+    function maneuverSpeechBody(code) {
+      if (code && code[0] === 'O') return `rotatória, pegue a ${ORD[Number(code[1])] || code[1] + 'ª'} saída`;
+      if (code === 'U') return 'faça o retorno';
+      return code === 'L' ? 'vire à esquerda' : 'vire à direita';
+    }
+
+    function untilPhrase(code) {
+      if (!code) return 'o destino';
+      if (code[0] === 'O') return `chegar à rotatória e pegar a ${ORD[Number(code[1])] || code[1] + 'ª'} saída`;
+      if (code === 'U') return 'fazer o retorno';
+      return code === 'L' ? 'virar à esquerda' : 'virar à direita';
+    }
+
+    function fmtKmSpeech(m) {
+      const km = m / 1000;
+      if (km >= 10) return `${Math.round(km)} quilômetros`;
+      const r = Math.round(km * 10) / 10;
+      if (r === 1) return '1 quilômetro';
+      return `${String(r).replace('.', ',')} quilômetros`;
+    }
+
+    // SIMULAÇÃO DA ROTA (velocidade pelo limite do trecho/cerca, indicações e voz)
+    const sim = { open: false, playing: false, dist: 0, factor: 4, follow: true, voice: true, total: 0, s: [], events: [], legs: [], fences: [], lastLimit: null, lastFenceKey: '', speed: 0, raf: 0, last: 0, marker: null, heading: 0, endSaid: false };
+
+    function simSay(text, opts) { if (sim.voice) say(text, opts); }
 
     function simBuild() {
       sim.s = [0];
       for (let i = 1; i < waypoints.length; i++) sim.s[i] = sim.s[i - 1] + distanceInMeters(waypoints[i - 1].lat, waypoints[i - 1].lng, waypoints[i].lat, waypoints[i].lng);
       sim.total = sim.s[waypoints.length - 1] || 0;
+
+      // indicações marcadas na rota
       sim.events = [];
-      waypoints.forEach((w, i) => { if (isManeuver(w.maneuver) && i < waypoints.length - 1) sim.events.push({ i, d: sim.s[i], code: w.maneuver }); });
+      waypoints.forEach((w, i) => { if (isManeuver(w.maneuver) && i < waypoints.length - 1) sim.events.push({ i, d: sim.s[i], code: w.maneuver, done: {} }); });
+
+      // trechos com mais de 1 km entre início → indicações → destino
+      sim.legs = [];
+      const marks = [{ d: 0, code: null }, ...sim.events, { d: sim.total, code: null }];
+      for (let k = 0; k < marks.length - 1; k++) {
+        if (marks[k + 1].d - marks[k].d > LONG_LEG_M) sim.legs.push({ from: marks[k].d, to: marks[k + 1].d, code: marks[k + 1].code, spoken: false });
+      }
+
+      // onde a rota entra e sai de cada cerca (distância ao longo do trajeto)
+      sim.fences = [];
+      (fencesData || []).forEach(f => {
+        const pts = (f.points || []).map(p => ({ lat: parseFloat(p.lat), lng: parseFloat(p.lng) })).filter(p => isFinite(p.lat) && isFinite(p.lng));
+        if (pts.length < 3) return;
+        const limit = parseInt(f.speed_limit_kmh, 10) || 30;
+        const lats = pts.map(p => p.lat), lngs = pts.map(p => p.lng);
+        const minLat = Math.min(...lats), maxLat = Math.max(...lats), minLng = Math.min(...lngs), maxLng = Math.max(...lngs);
+
+        let cur = null;
+        for (let i = 0; i < waypoints.length - 1; i++) {
+          const a = waypoints[i], b = waypoints[i + 1];
+          const len = sim.s[i + 1] - sim.s[i];
+          const steps = Math.max(1, Math.floor(len / 2.5));
+          for (let k = (i === 0 ? 0 : 1); k <= steps; k++) {
+            const r = k / steps;
+            const lat = a.lat + (b.lat - a.lat) * r, lng = a.lng + (b.lng - a.lng) * r, d = sim.s[i] + len * r;
+            const inside = lat >= minLat && lat <= maxLat && lng >= minLng && lng <= maxLng && pointInPolygon(lat, lng, pts);
+            if (inside && !cur) cur = { name: f.name || 'Cerca', limit, enter: d, exit: d, startsInside: d === 0, warned: false };
+            else if (inside && cur) cur.exit = d;
+            else if (!inside && cur) { sim.fences.push(cur); cur = null; }
+          }
+        }
+        if (cur) sim.fences.push(cur);
+      });
+      sim.fences.sort((x, y) => x.enter - y.enter);
     }
-    function simRebuild() { simBuild(); }
+
+    // Rota editada com a simulação aberta: refaz as contas sem repetir o que já ficou para trás
+    function simRebuild() {
+      simBuild();
+      sim.events.forEach(ev => { if (ev.d - sim.dist <= 0) ev.done = { far: true, near: true }; });
+      sim.legs.forEach(lg => { if (sim.dist >= lg.from + LONG_LEG_AFTER_M) lg.spoken = true; });
+      sim.fences.forEach(f => { if (f.enter - sim.dist <= FENCE_WARN_M) f.warned = true; });
+    }
+
+    // Recomeço: todos os avisos voltam a valer
+    function simResetFlags() {
+      sim.events.forEach(ev => { ev.done = {}; });
+      sim.legs.forEach(lg => { lg.spoken = false; });
+      sim.fences.forEach(f => { f.warned = false; });
+      sim.lastLimit = null; sim.lastFenceKey = ''; sim.endSaid = false;
+    }
+
+    function simFenceAt(d) {
+      let best = null;
+      for (const f of sim.fences) if (d >= f.enter && d <= f.exit && (!best || f.limit < best.limit)) best = f;
+      return best;
+    }
 
     function simUpdateButtons() {
       const on = 'bg-sky-600/30 text-sky-300 border border-sky-500/40', off = 'bg-slate-800 text-slate-500 border border-slate-700';
@@ -1421,10 +1645,12 @@
       if (waypoints.length < 2) { notify('Desenhe a rota primeiro (mínimo 2 pontos).', 'warning'); return; }
       if (sim.open) closeSimulation();
       simBuild();
-      sim.open = true; sim.dist = 0; sim.speed = 0; sim.playing = true; sim.said = new Set(); sim.endSaid = false;
+      sim.open = true; sim.dist = 0; sim.speed = 0; sim.playing = true;
+      simResetFlags();
       $('simPanel').classList.remove('hidden');
       simUpdateButtons();
-      speakSim('Iniciando simulação da rota.');
+      stopSpeaking();
+      simSay('Iniciando simulação da rota.', { prio: 2, key: 'start' });
       sim.last = performance.now();
       sim.raf = requestAnimationFrame(simTick);
     }
@@ -1432,7 +1658,7 @@
     function closeSimulation() {
       sim.open = false; sim.playing = false;
       cancelAnimationFrame(sim.raf);
-      try { window.speechSynthesis && window.speechSynthesis.cancel(); } catch (e) {}
+      stopSpeaking();
       simLayer.clearLayers(); sim.marker = null;
       $('simPanel').classList.add('hidden');
     }
@@ -1440,26 +1666,78 @@
     function simTogglePlay() {
       sim.playing = !sim.playing;
       if (sim.playing) { sim.last = performance.now(); cancelAnimationFrame(sim.raf); sim.raf = requestAnimationFrame(simTick); }
-      else { try { window.speechSynthesis && window.speechSynthesis.cancel(); } catch (e) {} }
+      else stopSpeaking();
       simUpdateButtons();
     }
     function simRestart() {
       cancelAnimationFrame(sim.raf);
-      sim.dist = 0; sim.speed = 0; sim.playing = true; sim.said = new Set(); sim.endSaid = false;
+      sim.dist = 0; sim.speed = 0; sim.playing = true;
+      simResetFlags();
       sim.last = performance.now();
       simUpdateButtons();
-      speakSim('Reiniciando simulação.');
+      stopSpeaking();
+      simSay('Reiniciando simulação.', { prio: 2, key: 'start' });
       sim.raf = requestAnimationFrame(simTick);
     }
     function simCycleFactor() { const f = [1, 2, 4, 8]; sim.factor = f[(f.indexOf(sim.factor) + 1) % f.length]; $('simFactorBtn').innerText = sim.factor + 'x'; }
     function simToggleFollow() { sim.follow = !sim.follow; simUpdateButtons(); }
     function simToggleVoice() {
       sim.voice = !sim.voice;
-      if (!sim.voice) { try { window.speechSynthesis && window.speechSynthesis.cancel(); } catch (e) {} }
+      if (!sim.voice) stopSpeaking();
       simUpdateButtons();
     }
 
     function simNextEvent() { return sim.events.find(ev => ev.d > sim.dist - 1) || null; }
+
+    // Avisos falados da simulação (mesma regra do GPS)
+    function simSpeech(limit, fz) {
+      // limite da via mudou (não repete o que a cerca já anunciou)
+      if (limit !== sim.lastLimit) {
+        sim.lastLimit = limit;
+        const jaDito = fz && fz.warned && limit === fz.limit;
+        if (!jaDito) simSay(`Limite de velocidade, ${limit} quilômetros por hora.`, { prio: 1, key: 'limit', ttl: 6000 });
+      }
+
+      // cerca à frente: avisa 35 m antes de entrar
+      for (const f of sim.fences) {
+        if (f.startsInside) continue;
+        const ahead = f.enter - sim.dist;
+        if (ahead > FENCE_WARN_M + 100) f.warned = false;   // voltou: rearma
+        if (!f.warned && ahead > 0 && ahead <= FENCE_WARN_M) {
+          f.warned = true;
+          notify(`Cerca à frente: ${f.name} (${f.limit} km/h)`, 'warning');
+          simSay(`Cerca à frente. Limite de ${f.limit} quilômetros por hora.`, { prio: 2, key: 'fence' + Math.round(f.enter), ttl: 6000 });
+        }
+      }
+
+      // indicações: "Em trezentos metros, ..." e, a 30 m, só "Vire à direita"
+      for (const ev of sim.events) {
+        const ahead = ev.d - sim.dist;
+        if (ahead > SIGNAL_FAR + 100) ev.done = {};
+        if (ahead <= 0) continue;
+        const body = maneuverSpeechBody(ev.code);
+        if (ahead <= SIGNAL_NEAR) {
+          if (!ev.done.near) {
+            ev.done.near = true; ev.done.far = true;
+            simSay(body.charAt(0).toUpperCase() + body.slice(1) + '.', { prio: 3, key: 'near' + Math.round(ev.d), ttl: 4000 });
+          }
+        } else if (ahead <= SIGNAL_FAR && !ev.done.far) {
+          ev.done.far = true;
+          const dist = ahead >= 270 ? 300 : Math.max(50, Math.round(ahead / 50) * 50);
+          simSay(`Em ${dist === 300 ? 'trezentos' : dist} metros, ${body}.`, { prio: 2, key: 'far' + Math.round(ev.d), ttl: 10000, valid: () => !ev.done.near });
+        }
+      }
+
+      // trecho longo sem indicação: 50 m depois da anterior, diz quanto falta
+      for (const lg of sim.legs) {
+        if (sim.dist < lg.from - 100) lg.spoken = false;
+        const remaining = lg.to - sim.dist;
+        if (!lg.spoken && sim.dist >= lg.from + LONG_LEG_AFTER_M && remaining > LONG_LEG_M) {
+          lg.spoken = true;
+          simSay(`Siga por ${fmtKmSpeech(remaining)} até ${untilPhrase(lg.code)}.`, { prio: 2, key: 'leg' + Math.round(lg.from), ttl: 15000 });
+        }
+      }
+    }
 
     function simTick(ts) {
       if (!sim.open || !sim.playing) return;
@@ -1473,14 +1751,12 @@
       const t = Math.min(1, Math.max(0, (sim.dist - sim.s[seg]) / segLen));
       const pos = { lat: a.lat + (b.lat - a.lat) * t, lng: a.lng + (b.lng - a.lng) * t };
 
-      // limite do trecho + cerca virtual
-      let limit = a.speedLimit || 60, fenceName = null;
-      for (const f of fencesData) {
-        if ((f.points || []).length >= 3 && pointInPolygon(pos.lat, pos.lng, f.points)) {
-          if (f.speed_limit_kmh < limit) limit = f.speed_limit_kmh;
-          fenceName = f.name || 'Cerca'; break;
-        }
-      }
+      // limite do trecho; dentro de cerca vale o menor entre a via e a cerca
+      let limit = a.speedLimit || 60;
+      const fz = simFenceAt(sim.dist);
+      if (fz && fz.limit < limit) limit = fz.limit;
+      const fenceName = fz ? fz.name : null;
+
       // aproxima a velocidade do limite suavemente (reduz antes da manobra)
       const ev = simNextEvent();
       const toEv = ev ? ev.d - sim.dist : Infinity;
@@ -1488,6 +1764,8 @@
       if (toEv < 40) target = Math.min(limit, 20);
       sim.speed += (target - sim.speed) * Math.min(1, dt * 3);
       sim.dist = Math.min(sim.total, sim.dist + ((sim.speed / 3.6) * dt * sim.factor));
+
+      simSpeech(limit, fz);
 
       // direção da seta
       if (b !== a) sim.heading = calculateBearing(a.lat, a.lng, b.lat, b.lng);
@@ -1517,9 +1795,6 @@
         $('simNextDist').innerText = `em ${fmtDist(d)} · ponto ${nxt.i + 1}`;
         $('simNextIcon').innerHTML = maneuverIconHtml(nxt.code) || '<i class="fa-solid fa-arrow-up"></i>';
         $('simNextIcon').className = 'w-9 h-9 rounded-lg bg-orange-500 text-white flex items-center justify-center shrink-0';
-        // avisos de voz
-        if (d <= 250 && d > 60 && !sim.said.has(nxt.i + 'a')) { sim.said.add(nxt.i + 'a'); speakSim(`Em ${Math.max(50, Math.round(d / 50) * 50)} metros, ${maneuverText(nxt.code).toLowerCase()}`); }
-        else if (d <= 60 && !sim.said.has(nxt.i + 'b')) { sim.said.add(nxt.i + 'b'); sim.said.add(nxt.i + 'a'); speakSim(maneuverText(nxt.code)); }
       } else {
         $('simNextText').innerText = 'Siga em frente';
         $('simNextDist').innerText = `destino em ${fmtDist(Math.max(0, sim.total - sim.dist))}`;
@@ -1535,7 +1810,7 @@
         sim.playing = false; sim.speed = 0;
         $('simSpeed').innerText = '0';
         $('simNextText').innerText = 'Chegou ao destino';
-        if (!sim.endSaid) { sim.endSaid = true; speakSim('Você chegou ao seu destino.'); }
+        if (!sim.endSaid) { sim.endSaid = true; simSay('Você chegou ao seu destino.', { prio: 3, key: 'arrival' }); }
         simUpdateButtons();
         return;
       }
